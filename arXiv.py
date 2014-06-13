@@ -12,17 +12,9 @@ Goes through the new submissions to present those more relevant to you.
 #file = urllib.urlopen("http://arxiv.org/list/astro-ph/new")
 #lines = [str(line) for line in file]
 #file.close()
-
-#f = urllib.urlopen("http://arxiv.org/list/astro-ph/new")
-#s = f.read()
-#f.close()
-# Write data to temp file.
-#ff = open("temp.del", "w")
-#ff.write(s)
-#ff.close()
 lines = [str(line) for line in open("temp.del", "r")]
 
-# Abstracts are located between <dt> and </dd>
+# Article info is located between <dt> and </dd> tags.
 
 # Store titles, links, authors and abstracts.
 articles, authors = [], []
