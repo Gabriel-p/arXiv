@@ -42,7 +42,7 @@ for index, line in enumerate(lines):
 	# End of article.
 	if line == '</dd>\n':
 		# Store in single list.
-		article = [title, abstract, authors, link]
+		article = [title, abstract, ", ".join(authors), link]
 		articles.append(article)
 		# Reset authors list.
 		authors = []
@@ -60,17 +60,14 @@ with open("keywords.dat", "r") as ff:
 
 
 # Loop through each article stored.
-for art in articles:
-	flag_r = False
-	for text in ou_k:
-		for lst in art[:2]:
-			if text in lst:
-				flag_r = True
-	if flag_r is False:
-		pass
-		#print 'accept', art[0]
-	else:
+for art_indx, art in enumerate(articles):
+	# Search for rejected words.
+	if any(keyword in string for string in art[:3] for keyword in ou_k):
 		print 'reject', art[0]
+	else:
+		for in_indx, in_keyw in enumerate(in_k):
+		    for lst in art[:3]:
+		        if in_keyw in lst:
 	#raw_input
 
 #print in_k
