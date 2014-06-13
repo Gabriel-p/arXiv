@@ -3,6 +3,7 @@
 import urllib
 import os
 import re
+import shlex
 
 """
 Goes through the new submissions to present those more relevant to you.
@@ -47,13 +48,33 @@ for index, line in enumerate(lines):
 		authors = []
 
 # Read accepted/rejected keywords from file.
-with open("keywords.day", "r") as ff:
+with open("keywords.dat", "r") as ff:
 	for li in ff:
 		if not li.startswith("#"):
+			# Accepted keywords.
 			if li[0:2] == 'IN':
-				in_k = [li[3:].split()]
+				in_k = shlex.split(li[3:])
+			# Rejected keywords.
+			if li[0:2] == 'OU':
+				ou_k = shlex.split(li[3:])
 
-print in_k
+
+# Loop through each article stored.
+for art in articles:
+	flag_r = False
+	for text in ou_k:
+		for lst in art[:2]:
+			if text in lst:
+				flag_r = True
+	if flag_r is False:
+		pass
+		#print 'accept', art[0]
+	else:
+		print 'reject', art[0]
+	#raw_input
+
+#print in_k
+#print ou_k
 
 
 	
