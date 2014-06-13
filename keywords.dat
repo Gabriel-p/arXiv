@@ -1,0 +1,16 @@
+
+# This file stores the keywords that identify those
+# articles the user is interested in and those that
+# should be excluded.
+
+# Accepted keywords.
+# Separated by spaces. Several words can be concatenated by
+# enclosing them with quote marks, ie: 'look for this'.
+IN
+
+
+# Rejected keyords.
+# Any article with either of these keywords in either its
+# title, abstract or author lit, will be automatically
+# rejected; even if it contains one or more accepted keyword.
+OUT 
