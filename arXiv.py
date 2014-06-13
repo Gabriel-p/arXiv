@@ -46,7 +46,15 @@ for index, line in enumerate(lines):
 		# Reset authors list.
 		authors = []
 
-print articles[17]
+# Read accepted/rejected keywords from file.
+with open("keywords.day", "r") as ff:
+	for li in ff:
+		if not li.startswith("#"):
+			if li[0:2] == 'IN':
+				in_k = [li[3:].split()]
+
+print in_k
+
 
 	
 
