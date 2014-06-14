@@ -6,11 +6,13 @@
 # Accepted keywords.
 # Separated by spaces. Several words can be concatenated by
 # enclosing them with quote marks, ie: 'look for this'.
-IN washington magellanic 'bayesian framework'
+IN 'open cluster' cluster python 'bayesian framework' bayesian
+IN 'third quadrant' statistics washington magellanic
+IN Piatti Vazquez
 
 
 # Rejected keyords.
 # Any article with either of these keywords in either its
 # title, abstract or author lit, will be automatically
 # rejected; even if it contains one or more accepted keyword.
-OU measured Dumitrache
+OU exoplanet
