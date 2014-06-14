@@ -6,10 +6,11 @@
 # Accepted keywords.
 # Separated by spaces. Several words can be concatenated by
 # enclosing them with quote marks, ie: 'look for this'.
-IN 'open cluster' cluster python 'bayesian framework' bayesian
-IN 'third quadrant' statistics washington magellanic
-IN Piatti Vazquez
-
+IN perren Piatti Vazquez
+IN 'open cluster' cluster 'third quadrant' 'milky way'
+IN statistics 'bayesian framework' bayesian bayes likelihood
+IN python membership decontamination
+IN washington magellanic trilegal besancon
 
 # Rejected keyords.
 # Any article with either of these keywords in either its
