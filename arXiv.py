@@ -10,6 +10,16 @@ Goes through the new submissions to present those more relevant to you.
 """
 
 
+def findWholeWord(w, string):
+    '''
+    Finds a single word or a sequence of words in the list 'string'.
+    Ignores upper/lowercasing. Returns True if 'w' was found and
+    False if it wasn't.
+    '''
+    pattern = re.compile(r'\b({0})\b'.format(w), flags=re.IGNORECASE)
+    return  True if pattern.search(string) else False
+
+
 def get_arxiv_data():
     '''
     Downloads data from arXiv.
@@ -46,7 +56,7 @@ def get_articles():
             a = re.split('Title:</span> |\n', line)
             title = str(a[1])
         # Get authors.
-        if line[0:28] == '<a href="/find/astro-ph/1/au':
+        if line.startswith('<a href="/find/'):
             a = re.split('all/0/1">|</a>', line)
             authors.append(str(a[1]))
         # Get abstract.
@@ -59,7 +69,7 @@ def get_articles():
         # End of article.
         if line == '</dd>\n':
             # Store in single list.
-            article = [title, abstract, ", ".join(authors), link]
+            article = [", ".join(authors), title, abstract, link]
             articles.append(article)
             # Reset authors list.
             authors = []
@@ -96,20 +106,23 @@ def get_rank(articles, in_k, ou_k):
     # Loop through each article stored.
     for art_indx, art in enumerate(articles):
         # Search for rejected words.
-        if any(keyword in string for string in art[:3] for keyword in ou_k):
-            art_rank[art_indx] = -1.
+        for ou_keyw in ou_k:
+            for lst in art[:3]:
+                # If the keyword is in any list.
+                if findWholeWord(ou_keyw, lst):
+                    art_rank[art_indx] = -1.
         else:
             # Search for accepted keywords.
             for in_indx, in_keyw in enumerate(in_k):
                 # Search titles, abstract and authors list.
-                for lst in art[:3]:
+                for in_lst, lst in enumerate(art[:3]):
                     # If the keyword is in any list.
                     if findWholeWord(in_keyw, lst):
                         # Assign a value based on its position
                         # in the accepted keywords list (higher
                         # values for earlier keywords)
-                        art_rank[art_indx] = art_rank[art_indx] + (1. /
-                        (1 + in_indx))
+                        art_rank[art_indx] = art_rank[art_indx] + \
+                        ((3. - in_lst) / (1. + in_indx))
     return art_rank
 
 
@@ -124,16 +137,6 @@ def sort_rev(art_rank, articles):
     art_s_rev = art_sorted[::-1]
 
     return art_s_rev
-
-
-def findWholeWord(w, string):
-    '''
-    Finds a single word or a sequence of words in the list 'string'.
-    Ignores upper/lowercasing. Returns True if 'w' was found and
-    False if it wasn't.
-    '''
-    pattern = re.compile(r'\b({0})\b'.format(w), flags=re.IGNORECASE)
-    return  True if pattern.search(string) else False
 
 
 # Get arXiv/astro-ph/new data.
@@ -151,5 +154,8 @@ art_rank = get_rank(articles, in_k, ou_k)
 # Sort articles according to its rank values.
 art_s_rev = sort_rev(art_rank, articles)
 
+print art_rank
+
 for i in range(10):
-    print i, art_s_rev[i][0], '\n'
+    print i, art_s_rev[i][1]
+    print art_s_rev[i][0], '\n'
