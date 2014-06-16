@@ -7,9 +7,9 @@
 # Separated by spaces. Several words can be concatenated by
 # enclosing them with quote marks, ie: 'look for this'.
 IN Piatti Vazquez
-IN 'open cluster' cluster 'third quadrant' python
+IN 'open cluster' 'third quadrant' python
 IN statistics 'bayesian framework' bayesian bayes likelihood
-IN 'milky way' membership decontamination
+IN membership decontamination 'milky way' cluster
 IN washington magellanic trilegal besancon
 
 # Rejected keyords.
