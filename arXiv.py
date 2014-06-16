@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-#import urllib
+import urllib
 #import os
 import re
 import shlex
@@ -24,9 +24,9 @@ def get_arxiv_data():
     '''
     Downloads data from arXiv.
     '''
-    #file = urllib.urlopen("http://arxiv.org/list/astro-ph/new")
-    #lines = [str(line) for line in file]
-    #file.close()
+    ff = urllib.urlopen("http://arxiv.org/list/astro-ph/new")
+    lines = [str(line) for line in ff]
+    ff.close()
 
     # f = urllib.urlopen("http://arxiv.org/list/astro-ph/new")
     # s = f.read()
@@ -34,7 +34,7 @@ def get_arxiv_data():
     # ff = open("temp.del", "w")
     # ff.write(s)
     # ff.close()
-    lines = [str(line) for line in open("temp.del", "r")]
+    #lines = [str(line) for line in open("temp.del", "r")]
 
     return lines
 
@@ -162,8 +162,6 @@ art_rank = get_rank(articles, in_k, ou_k)
 # Sort articles according to its rank values.
 art_s_rev = sort_rev(art_rank, articles)
 
-print art_rank
-
-for i in range(10):
+for i in range(15):
     print i, art_s_rev[i][1]
     print art_s_rev[i][0], '\n'
