@@ -69,7 +69,11 @@ def get_articles():
         # End of article.
         if line == '</dd>\n':
             # Store in single list.
-            article = [", ".join(authors), title, abstract, link]
+            # Join authors in single list.
+            authors_j = ", ".join(authors)
+            # Replace \n from abstract with a space.
+            abstract_r = abstract.replace("\n", " ")
+            article = [authors_j, title, abstract_r, link]
             articles.append(article)
             # Reset authors list.
             authors = []
@@ -106,23 +110,27 @@ def get_rank(articles, in_k, ou_k):
     # Loop through each article stored.
     for art_indx, art in enumerate(articles):
         # Search for rejected words.
-        for ou_keyw in ou_k:
-            for lst in art[:3]:
-                # If the keyword is in any list.
-                if findWholeWord(ou_keyw, lst):
-                    art_rank[art_indx] = -1.
-        else:
+            for ou_indx, ou_keyw in enumerate(ou_k):
+                # Search titles, abstract and authors list.
+                for ata_indx, lst in enumerate(art[:3]):
+                    # If the keyword is in any list.
+                    if findWholeWord(ou_keyw, lst):
+                        # Assign a value based on its position
+                        # in the rejected keywords list (higher
+                        # values for earlier keywords)
+                        art_rank[art_indx] = art_rank[art_indx] - \
+                        ((3. - ata_indx) / (1. + ou_indx))
             # Search for accepted keywords.
             for in_indx, in_keyw in enumerate(in_k):
                 # Search titles, abstract and authors list.
-                for in_lst, lst in enumerate(art[:3]):
+                for ata_indx, lst in enumerate(art[:3]):
                     # If the keyword is in any list.
                     if findWholeWord(in_keyw, lst):
                         # Assign a value based on its position
                         # in the accepted keywords list (higher
                         # values for earlier keywords)
                         art_rank[art_indx] = art_rank[art_indx] + \
-                        ((3. - in_lst) / (1. + in_indx))
+                        ((3. - ata_indx) / (1. + in_indx))
     return art_rank
 
 
