@@ -148,7 +148,7 @@ def sort_rev(art_rank, articles):
 # Read accepted/rejected keywords and categories from file.
 in_k, ou_k, categs = get_in_out()
 
-# Get arXiv/astro-ph/new data.
+# Get new data from all the selected categories.
 articles = []
 for cat_indx, categ in enumerate(categs):
 
