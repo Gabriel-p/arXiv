@@ -7,10 +7,10 @@ categories in [arXiv](arxiv.org) and presents those
 articles more relevant to the user, sorted according
 to a list of keywords selected by the user.
 
-Keywords are provided to the script through the
-`keywords.dat` file. Accepted keywords move an article
-upwards the list, while rejected keywords move it
-downwards.
+Keywords and selected categories are provided to the
+script through the `keywords.dat` file. Accepted keywords
+move an article upwards the list, while rejected keywords
+move it downwards.
 
 ## Categories
 
