@@ -170,7 +170,7 @@ for cat_indx, categ in enumerate(categs):
 # Obtain articles' ranks according to keywords.
 art_rank = get_rank(articles, in_k, ou_k)
 
-# Sort articles according to its rank values.
+# Sort articles according to their rank values.
 art_s_rev = sort_rev(art_rank, articles)
 
 for i in range(15):
