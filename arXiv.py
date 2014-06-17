@@ -20,11 +20,11 @@ def findWholeWord(w, string):
     return  True if pattern.search(string) else False
 
 
-def get_arxiv_data():
+def get_arxiv_data(categ):
     '''
     Downloads data from arXiv.
     '''
-    ff = urllib.urlopen("http://arxiv.org/list/astro-ph/new")
+    ff = urllib.urlopen("http://arxiv.org/list/" + categ + "/new")
     lines = [str(line) for line in ff]
     ff.close()
 
@@ -85,10 +85,15 @@ def get_in_out():
     '''
     Reads in/out keywords from file.
     '''
-    in_k, ou_k = [], []
+    in_k, ou_k, categs = [], [], []
     with open("keywords.dat", "r") as ff:
         for li in ff:
             if not li.startswith("#"):
+                # Categories.
+                if li[0:2] == 'CA':
+                  # Store each keyword separately in list.
+                    for i in shlex.split(li[3:]):
+                        categs.append(i)
                 # Accepted keywords.
                 if li[0:2] == 'IN':
                     # Store each keyword separately in list.
@@ -96,9 +101,11 @@ def get_in_out():
                         in_k.append(i)
                 # Rejected keywords.
                 if li[0:2] == 'OU':
-                    ou_k = shlex.split(li[3:])
+                  # Store each keyword separately in list.
+                    for i in shlex.split(li[3:]):
+                        ou_k.append(i)
 
-    return in_k, ou_k
+    return in_k, ou_k, categs
 
 
 def get_rank(articles, in_k, ou_k):
@@ -147,14 +154,18 @@ def sort_rev(art_rank, articles):
     return art_s_rev
 
 
+# Read accepted/rejected keywords and categories from file.
+in_k, ou_k, categs = get_in_out()
+
 # Get arXiv/astro-ph/new data.
-lines = get_arxiv_data()
+articles = []
+for cat_indx, categ in enumerate(categs):
 
-# Store titles, links, authors and abstracts into list.
-articles = get_articles()
+    # Get data from each category.
+    lines = get_arxiv_data(categ)
 
-# Read accepted/rejected keywords from file.
-in_k, ou_k = get_in_out()
+    # Store titles, links, authors and abstracts into list.
+    articles = articles + get_articles()
 
 # Obtain articles' ranks according to keywords.
 art_rank = get_rank(articles, in_k, ou_k)
