@@ -49,3 +49,12 @@ Quantitative Biology: **q-bio**
 Quantitative Finance: **q-fin**
 
 Statistics: **stat**
+
+## Requirements
+
+The following packages are needed (all are included
+in the standard installation):
+
+* `urllib`
+* `re`
+* `shlex`

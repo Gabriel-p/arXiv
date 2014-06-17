@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import urllib
-#import os
 import re
 import shlex
 
@@ -27,14 +26,6 @@ def get_arxiv_data(categ):
     ff = urllib.urlopen("http://arxiv.org/list/" + categ + "/new")
     lines = [str(line) for line in ff]
     ff.close()
-
-    # f = urllib.urlopen("http://arxiv.org/list/astro-ph/new")
-    # s = f.read()
-    # f.close()
-    # ff = open("temp.del", "w")
-    # ff.write(s)
-    # ff.close()
-    #lines = [str(line) for line in open("temp.del", "r")]
 
     return lines
 
