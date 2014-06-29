@@ -1,0 +1,20 @@
+
+# This file stores the keywords that identify those
+# articles the user is interested in and those that
+# should be excluded.
+
+# Categories.
+CA astro-ph stat
+
+# Accepted keywords.
+# Separated by spaces. Several words can be concatenated by
+# enclosing them with quote marks, ie: 'look for this'.
+IN keyword1 keyword2 keyword3 keyword4 keyword5
+IN keyword6 keyword7 keyword8 keyword9
+
+
+# Rejected keyords.
+# Any article with either of these keywords in either its
+# title, abstract or author lit, will be automatically
+# rejected; even if it contains one or more accepted keyword.
+OU keyword10 keyword11
