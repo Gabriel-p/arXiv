@@ -41,7 +41,8 @@ def get_articles():
         if line[0:4] == '<dt>':
             a = re.split('</a>&nbsp;  <span class="list-identifier"><a href="|\
             " title="Abstract">', line)
-            link = 'arxiv.orx' + a[1]
+            b = re.split('" title="Abstract">', a[1])
+            link = 'arxiv.org' + b[0]
         # Get title.
         if line[0:38] == '<span class="descriptor">Title:</span>':
             a = re.split('Title:</span> |\n', line)
@@ -161,9 +162,10 @@ for cat_indx, categ in enumerate(categs):
 # Obtain articles' ranks according to keywords.
 art_rank = get_rank(articles, in_k, ou_k)
 
-# Sort articles according to their rank values.
+# Sort articles according to rank values.
 art_s_rev = sort_rev(art_rank, articles)
 
 for i in range(15):
-    print i, art_s_rev[i][1]
+    print i, art_s_rev[i][1], ' (', art_s_rev[i][3], ')'
     print art_s_rev[i][0], '\n'
+    print art_s_rev[i][2], '\n'
