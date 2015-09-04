@@ -3,10 +3,7 @@
 import urllib
 import re
 import shlex
-
-"""
-Goes through the new submissions to present those more relevant to you.
-"""
+import textwrap
 
 
 def findWholeWord(w, string):
@@ -16,7 +13,7 @@ def findWholeWord(w, string):
     False if it wasn't.
     '''
     pattern = re.compile(r'\b({0})\b'.format(w), flags=re.IGNORECASE)
-    return  True if pattern.search(string) else False
+    return True if pattern.search(string) else False
 
 
 def get_arxiv_data(categ):
@@ -30,7 +27,7 @@ def get_arxiv_data(categ):
     return lines
 
 
-def get_articles():
+def get_articles(lines):
     '''
     Splits articles into lists containing title, abstract, authors and link.
     Article info is located between <dt> and </dd> tags.
@@ -83,7 +80,7 @@ def get_in_out():
             if not li.startswith("#"):
                 # Categories.
                 if li[0:2] == 'CA':
-                  # Store each keyword separately in list.
+                    # Store each keyword separately in list.
                     for i in shlex.split(li[3:]):
                         categs.append(i)
                 # Accepted keywords.
@@ -93,7 +90,7 @@ def get_in_out():
                         in_k.append(i)
                 # Rejected keywords.
                 if li[0:2] == 'OU':
-                  # Store each keyword separately in list.
+                    # Store each keyword separately in list.
                     for i in shlex.split(li[3:]):
                         ou_k.append(i)
 
@@ -118,7 +115,7 @@ def get_rank(articles, in_k, ou_k):
                         # in the rejected keywords list (higher
                         # values for earlier keywords)
                         art_rank[art_indx] = art_rank[art_indx] - \
-                        ((3. - ata_indx) / (1. + ou_indx))
+                            ((3. - ata_indx) / (1. + ou_indx))
             # Search for accepted keywords.
             for in_indx, in_keyw in enumerate(in_k):
                 # Search titles, abstract and authors list.
@@ -129,7 +126,7 @@ def get_rank(articles, in_k, ou_k):
                         # in the accepted keywords list (higher
                         # values for earlier keywords)
                         art_rank[art_indx] = art_rank[art_indx] + \
-                        ((3. - ata_indx) / (1. + in_indx))
+                            ((3. - ata_indx) / (1. + in_indx))
     return art_rank
 
 
@@ -146,26 +143,46 @@ def sort_rev(art_rank, articles):
     return art_s_rev
 
 
-# Read accepted/rejected keywords and categories from file.
-in_k, ou_k, categs = get_in_out()
+def main(N_art):
+    '''
+    Query newly added articles to selected arXiv categories, rank them
+    according to given keywords, and print out the ranked list.
+    '''
+    # Read accepted/rejected keywords and categories from file.
+    in_k, ou_k, categs = get_in_out()
 
-# Get new data from all the selected categories.
-articles = []
-for cat_indx, categ in enumerate(categs):
+    # Get new data from all the selected categories.
+    articles = []
+    for cat_indx, categ in enumerate(categs):
 
-    # Get data from each category.
-    lines = get_arxiv_data(categ)
+        # Get data from each category.
+        lines = get_arxiv_data(categ)
 
-    # Store titles, links, authors and abstracts into list.
-    articles = articles + get_articles()
+        # Store titles, links, authors and abstracts into list.
+        articles = articles + get_articles(lines)
 
-# Obtain articles' ranks according to keywords.
-art_rank = get_rank(articles, in_k, ou_k)
+    # Obtain articles' ranks according to keywords.
+    art_rank = get_rank(articles, in_k, ou_k)
 
-# Sort articles according to rank values.
-art_s_rev = sort_rev(art_rank, articles)
+    # Sort articles according to rank values.
+    art_s_rev = sort_rev(art_rank, articles)
 
-for i in range(15):
-    print i, art_s_rev[i][1], ' (', art_s_rev[i][3], ')'
-    print art_s_rev[i][0], '\n'
-    print art_s_rev[i][2], '\n'
+    print '\n\n'
+    for i in range(N_art):
+        title = str(art_s_rev[i][1])
+        print str(i + 1) + ')', textwrap.fill(title, 77)
+        print art_s_rev[i][0], '(' + str(art_s_rev[i][3]) + ')\n'
+        abstract = str(art_s_rev[i][2])
+        print textwrap.fill(abstract, 80), '\n\n'
+
+
+if __name__ == "__main__":
+
+    N_art = raw_input('Number of articles to fetch (N): ')
+    try:
+        N_art = int(N_art)
+    except:
+        N_art = 10
+        print 'Error. Using default value (N = {}).'.format(N_art)
+
+    main(N_art)
