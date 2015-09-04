@@ -58,3 +58,4 @@ in the standard installation):
 * `urllib`
 * `re`
 * `shlex`
+* `textwrap`
