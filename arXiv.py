@@ -169,9 +169,13 @@ def main(N_art):
 
     print '\n\n'
     for i in range(N_art):
+        # Title
         title = str(art_s_rev[i][1])
         print str(i + 1) + ')', textwrap.fill(title, 77)
-        print art_s_rev[i][0], '(' + str(art_s_rev[i][3]) + ')\n'
+        # Authors + arXiv link
+        authors = art_s_rev[i][0]
+        print textwrap.fill(authors, 77), '(' + str(art_s_rev[i][3]) + ')\n'
+        # Abstract
         abstract = str(art_s_rev[i][2])
         print textwrap.fill(abstract, 80), '\n\n'
 
