@@ -36,8 +36,9 @@ def get_articles(lines):
     for index, line in enumerate(lines):
         # Get link.
         if line[0:4] == '<dt>':
-            a = re.split('</a>&nbsp;  <span class="list-identifier"><a href="|\
-            " title="Abstract">', line)
+            a = re.split(
+                """</a>&nbsp;  <span class="list-identifier"><a href="|\
+                   " title="Abstract">""", line)
             b = re.split('" title="Abstract">', a[1])
             link = 'arxiv.org' + b[0]
         # Get title.
@@ -49,8 +50,8 @@ def get_articles(lines):
             a = re.split('all/0/1">|</a>', line)
             authors.append(str(a[1]))
         # Get abstract.
-        if line[0:3] == '<p>':
-            abstract = re.split('<p>', line)[1]
+        if line.startswith('<p class="mathjax">'):
+            abstract = re.split('<p class="mathjax">', line)[1]
             i = 1
             while lines[index + i] != '</p>\n':
                 abstract = abstract + str(lines[index + i])
