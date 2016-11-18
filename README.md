@@ -52,10 +52,4 @@ Statistics: **stat**
 
 ## Requirements
 
-The following packages are needed (all are included
-in the standard installation):
-
-* `urllib`
-* `re`
-* `shlex`
-* `textwrap`
+Needs Python 3 and the `beautifulsoup4` package.

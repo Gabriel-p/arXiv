@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
-import urllib
+from bs4 import BeautifulSoup as BS
+from urllib.request import urlopen
 import re
 import shlex
 import textwrap
@@ -20,53 +21,31 @@ def get_arxiv_data(categ):
     '''
     Downloads data from arXiv.
     '''
-    ff = urllib.urlopen("http://arxiv.org/list/" + categ + "/new")
-    lines = [str(line) for line in ff]
-    ff.close()
+    html = urlopen("http://arxiv.org/list/" + categ + "/new")
+    soup = BS(html, 'lxml')
 
-    return lines
+    return soup
 
 
-def get_articles(lines):
+def get_articles(soup):
     '''
     Splits articles into lists containing title, abstract, authors and link.
     Article info is located between <dt> and </dd> tags.
     '''
-    articles, authors = [], []
-    for index, line in enumerate(lines):
-        # Get link.
-        if line[0:4] == '<dt>':
-            a = re.split(
-                """</a>&nbsp;  <span class="list-identifier"><a href="|\
-                   " title="Abstract">""", line)
-            b = re.split('" title="Abstract">', a[1])
-            link = 'arxiv.org' + b[0]
-        # Get title.
-        if line[0:38] == '<span class="descriptor">Title:</span>':
-            a = re.split('Title:</span> |\n', line)
-            title = str(a[1])
-        # Get authors.
-        if line.startswith('<a href="/find/'):
-            a = re.split('all/0/1">|</a>', line)
-            authors.append(str(a[1]))
-        # Get abstract.
-        if line.startswith('<p class="mathjax">'):
-            abstract = re.split('<p class="mathjax">', line)[1]
-            i = 1
-            while lines[index + i] != '</p>\n':
-                abstract = abstract + str(lines[index + i])
-                i += 1
-        # End of article.
-        if line == '</dd>\n':
-            # Store in single list.
-            # Join authors in single list.
-            authors_j = ", ".join(authors)
-            # Replace \n from abstract with a space.
-            abstract_r = abstract.replace("\n", " ")
-            article = [authors_j, title, abstract_r, link]
-            articles.append(article)
-            # Reset authors list.
-            authors = []
+    # Get links.
+    links = [_.text.split()[0] for _ in
+             soup.find_all(class_="list-identifier")]
+    # Get titles.
+    titles = [_.text.replace('\n', '').replace('Title: ', '') for _ in
+              soup.find_all(class_="list-title mathjax")]
+    # Get authors.
+    authors = [_.text.replace('\n', '').replace('Authors:', '')
+               for _ in soup.find_all(class_="list-authors")]
+    # Get abstract.
+    abstracts = [_.text.replace('\n', ' ') for _
+                 in soup.find_all('p', class_="mathjax")]
+
+    articles = list(zip(*[authors, titles, abstracts, links]))
 
     return articles
 
@@ -157,10 +136,10 @@ def main(N_art):
     for cat_indx, categ in enumerate(categs):
 
         # Get data from each category.
-        lines = get_arxiv_data(categ)
+        soup = get_arxiv_data(categ)
 
         # Store titles, links, authors and abstracts into list.
-        articles = articles + get_articles(lines)
+        articles = articles + get_articles(soup)
 
     # Obtain articles' ranks according to keywords.
     art_rank = get_rank(articles, in_k, ou_k)
@@ -168,26 +147,26 @@ def main(N_art):
     # Sort articles according to rank values.
     art_s_rev = sort_rev(art_rank, articles)
 
-    print '\n\n'
+    print('\n\n')
     for i in range(N_art):
         # Title
         title = str(art_s_rev[i][1])
-        print str(i + 1) + ')', textwrap.fill(title, 77)
+        print(str(i + 1) + ')', textwrap.fill(title, 77))
         # Authors + arXiv link
         authors = art_s_rev[i][0]
-        print textwrap.fill(authors, 77), '(' + str(art_s_rev[i][3]) + ')\n'
+        print(textwrap.fill(authors, 77), '(' + str(art_s_rev[i][3]) + ')\n')
         # Abstract
         abstract = str(art_s_rev[i][2])
-        print textwrap.fill(abstract, 80), '\n\n'
+        print(textwrap.fill(abstract, 80), '\n\n')
 
 
 if __name__ == "__main__":
 
-    N_art = raw_input('Number of articles to fetch (N): ')
+    N_art = input('Number of articles to list (N): ')
     try:
         N_art = int(N_art)
     except:
         N_art = 10
-        print 'Error. Using default value (N = {}).'.format(N_art)
+        print('Error. Using default value (N = {}).'.format(N_art))
 
     main(N_art)
