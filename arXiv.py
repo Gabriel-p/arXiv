@@ -33,7 +33,7 @@ def get_articles(soup):
     Article info is located between <dt> and </dd> tags.
     '''
     # Get links.
-    links = [_.text.split()[0] for _ in
+    links = ['https://' + _.text.split()[0].replace(':', '.org/abs/') for _ in
              soup.find_all(class_="list-identifier")]
     # Get titles.
     titles = [_.text.replace('\n', '').replace('Title: ', '') for _ in
