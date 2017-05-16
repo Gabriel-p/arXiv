@@ -1,14 +1,15 @@
 
 import os
 from os.path import join, realpath, dirname
-import re
-from collections import OrderedDict
 import numpy as np
 
 from bs4 import BeautifulSoup as BS
 import requests
+import re
+from collections import OrderedDict
 import shlex
 import textwrap
+import string
 from textblob.classifiers import NaiveBayesClassifier
 
 import nltk.data
@@ -47,17 +48,19 @@ def get_arxiv_data(categ):
     '''
     Downloads data from arXiv.
     '''
-    # # html = requests.get("http://arxiv.org/list/" + categ + "/new")
-    # day, month, year = '1', '4', '2017'
-    # url = "https://arxiv.org/catchup?smonth=" + month + "&group=grp_&s" +\
-    #       "day=" + day + "&num=50&archive=astro-ph&method=with&syear=" + year
-    # html = requests.get(url)
-    # soup = BS(html.content, 'lxml')
+    print("\nDownloading arXiv data.")
+    # url = "http://arxiv.org/list/" + categ + "/new"
+    day, month, year = '7', '4', '2017'
+    url = "https://arxiv.org/catchup?smonth=" + month + "&group=grp_&s" +\
+          "day=" + day + "&num=50&archive=astro-ph&method=with&syear=" + year
+
+    html = requests.get(url)
+    soup = BS(html.content, 'lxml')
 
     # with open("temp", "wb") as f:
     #     f.write(html.content)
-    with open("temp", "rb") as f:
-        soup = BS(f, 'lxml')
+    # with open("temp", "rb") as f:
+    #     soup = BS(f, 'lxml')
 
     return soup
 
@@ -140,21 +143,39 @@ def get_Bprob(mypath, articles):
     Obtains keyword base probabilities for each article, according to the
     in/out keywords.
     '''
-    stpwrds = stopwords.words("english")
+    stpwrds = stopwords.words("english") +\
+        ['find', 'data', 'observed', 'using', 'show', 'well',
+         'around', 'used', 'thus', 'within', 'investigate', 'also',
+         'recently', 'however']
+    # Remove punctuation.
+    translator = str.maketrans('', '', string.punctuation)
+
     try:
         with open(join(mypath, "classifier.pkl"), "rb") as f:
             cl = pickle.load(f)
 
+        # abst = []
         art_B_prob = []
         for art in articles:
-            title, abstract = str(art[1]), str(art[2])
-            # Remove stopwords plus some common words while maintaining
+            title = str(art[1]).lower()
+            abstract = str(art[2]).lower().translate(translator)
+            # Remove stopwords and some common words while maintaining
             # abstract's order.
             abstract = ' '.join(
                 [w for w in list(OrderedDict.fromkeys(abstract.split()))
                  if w not in stpwrds])
+
+            # abst.append(abstract)
+            # print("{:.3f}, {:.3f}, {:.3f}".format(
+            #     cl.prob_classify(title + ' ' + abstract).prob("neg"),
+            #     cl.prob_classify(title + ' ' + abstract).prob("meh"),
+            #     cl.prob_classify(title + ' ' + abstract).prob("pos")))
+
             art_B_prob.append(
                 cl.prob_classify(title + ' ' + abstract).prob("pos"))
+
+        # from collections import Counter
+        # print(Counter(w for w in ' '.join(abst).split() if len(w) >= 4))
 
     except FileNotFoundError:
         print("No previous classifier file found.\n")
@@ -213,19 +234,22 @@ def main():
     for i, art in enumerate(articles):
         # Title
         title = str(art[1])
-        print(str(i + 1) + ')', textwrap.fill(title, 77))
+        print('\n' + str(i + 1) + ')', textwrap.fill(title, 77))
         # Authors + arXiv link
-        authors = art[0]
+        authors = art[0] if len(art[0].split(',')) < 4 else\
+            ','.join(art[0].split(',')[:3]) + ', et al.'
         print(textwrap.fill(authors, 77), '\n* ' + str(art[3]) + '\n')
         # Abstract
         abstract = str(art[2])
         print(textwrap.fill(abstract, 80))
-        print("\nK_p, B_p: {:.2f}, {:.2f}".format(K_prob[i], B_prob[i]))
-        pn = input("Pos (p) or Neg (n): ")
-        if pn == "p":
-            train.append([title + ' ' + abstract, 'pos'])
-        elif pn in ["n", "not", "N", "Not"]:
+        print("\nK_p: {:.2f}, B_p: {:.2f}".format(K_prob[i], B_prob[i]))
+        pn = input("B_p (1/2/3): ")
+        if pn == '1':
             train.append([title + ' ' + abstract, 'neg'])
+        elif pn == '2':
+            train.append([title + ' ' + abstract, 'meh'])
+        elif pn == '3':
+            train.append([title + ' ' + abstract, 'pos'])
         elif pn == "quit":
             break
 

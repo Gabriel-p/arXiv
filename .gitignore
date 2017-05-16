@@ -1,2 +1,5 @@
 keywords.dat
 temp.del
+input/*.pkl
+temp
+
