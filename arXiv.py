@@ -46,26 +46,25 @@ def get_in_out():
                     for i in shlex.split(li[3:]):
                         ou_k.append(i)
 
-    start_date = list(map(int, start_date.split('-')))
-    end_date = list(map(int, end_date.split('-')))
     return mode, [start_date, end_date], in_k, ou_k, categs
 
 
-def dateRange(mode, date_range):
+def dateRange(date_range):
     """
     Store individual dates for a range, skipping weekends.
     """
-    dates_no_wknds = ['']
-    if mode == 'train':
-        ini_date, end_date = date(*date_range[0]), date(*date_range[1])
+    start_date = list(map(int, date_range[0].split('-')))
+    end_date = list(map(int, date_range[1].split('-')))
 
-        d, delta, weekend = ini_date, timedelta(days=1), [5, 6]
-        dates_no_wknds = []
-        while d <= end_date:
-            if d.weekday() not in weekend:
-                # Store as [year, month, day]
-                dates_no_wknds.append(str(d).split('-'))
-            d += delta
+    ini_date, end_date = date(*start_date), date(*end_date)
+
+    d, delta, weekend = ini_date, timedelta(days=1), [5, 6]
+    dates_no_wknds = []
+    while d <= end_date:
+        if d.weekday() not in weekend:
+            # Store as [year, month, day]
+            dates_no_wknds.append(str(d).split('-'))
+        d += delta
 
     return dates_no_wknds
 
@@ -241,7 +240,9 @@ def main():
     # Read accepted/rejected keywords and categories from file.
     mode, date_range, in_k, ou_k, categs = get_in_out()
 
-    dates_no_wknds = dateRange(mode, date_range)
+    dates_no_wknds = ['']
+    if mode == 'train':
+        dates_no_wknds = dateRange(date_range)
 
     for day_week in dates_no_wknds:
 
