@@ -3,18 +3,23 @@
 # articles the user is interested in and those that
 # should be excluded.
 
+# 'Mode' can be either 'train' or 'recent'. If 'train'
+# is used, then a proper date range must be supplied.
+# Otherwise the most recent article submissions will be
+# requested from arXiv.
+#
+#   Mode   start_date     end_date
+MO  train    2017-5-1    2017-5-10
+
 # Categories.
 CA astro-ph stat
 
 # Accepted keywords.
 # Separated by spaces. Several words can be concatenated by
-# enclosing them with quote marks, ie: 'look for this'.
-IN keyword1 keyword2 keyword3 keyword4 keyword5
+# enclosing them within quote marks, ie: "look for this".
+IN keyword1 keyword2 "this is another keyword" keyword5
 IN keyword6 keyword7 keyword8 keyword9
 
 
-# Rejected keyords.
-# Any article with either of these keywords in either its
-# title, abstract or author lit, will be automatically
-# rejected; even if it contains one or more accepted keyword.
+# Rejected keywords. Same as above.
 OU keyword10 keyword11

@@ -10,6 +10,7 @@ from collections import OrderedDict
 import shlex
 import textwrap
 import string
+from datetime import date, timedelta
 from textblob.classifiers import NaiveBayesClassifier
 
 import nltk.data
@@ -25,6 +26,10 @@ def get_in_out():
     with open("keywords.dat", "r") as ff:
         for li in ff:
             if not li.startswith("#"):
+                # Mode.
+                if li[0:2] == 'MO':
+                    # Store each keyword separately in list.
+                    mode, start_date, end_date = shlex.split(li[3:])
                 # Categories.
                 if li[0:2] == 'CA':
                     # Store each keyword separately in list.
@@ -41,18 +46,44 @@ def get_in_out():
                     for i in shlex.split(li[3:]):
                         ou_k.append(i)
 
-    return in_k, ou_k, categs
+    start_date = list(map(int, start_date.split('-')))
+    end_date = list(map(int, end_date.split('-')))
+    return mode, [start_date, end_date], in_k, ou_k, categs
 
 
-def get_arxiv_data(categ):
+def dateRange(mode, date_range):
+    """
+    Store individual dates for a range, skipping weekends.
+    """
+    dates_no_wknds = ['']
+    if mode == 'train':
+        ini_date, end_date = date(*date_range[0]), date(*date_range[1])
+
+        d, delta, weekend = ini_date, timedelta(days=1), [5, 6]
+        dates_no_wknds = []
+        while d <= end_date:
+            if d.weekday() not in weekend:
+                # Store as [year, month, day]
+                dates_no_wknds.append(str(d).split('-'))
+            d += delta
+
+    return dates_no_wknds
+
+
+def get_arxiv_data(categ, day_week):
     '''
     Downloads data from arXiv.
     '''
-    print("\nDownloading arXiv data.")
-    # url = "http://arxiv.org/list/" + categ + "/new"
-    day, month, year = '7', '4', '2017'
-    url = "https://arxiv.org/catchup?smonth=" + month + "&group=grp_&s" +\
-          "day=" + day + "&num=50&archive=astro-ph&method=with&syear=" + year
+    if day_week == '':
+        print("\nDownloading latest arXiv data.")
+        url = "http://arxiv.org/list/" + categ + "/new"
+    else:
+        year, month, day = day_week
+        print("\nDownloading arXiv data for {}-{}-{}.".format(
+            year, month, day))
+        url = "https://arxiv.org/catchup?smonth=" + month + "&group=grp_&s" +\
+              "day=" + day + "&num=50&archive=astro-ph&method=with&syear=" +\
+              year
 
     html = requests.get(url)
     soup = BS(html.content, 'lxml')
@@ -138,11 +169,9 @@ def get_Kprob(articles, in_k, ou_k):
     return art_K_prob
 
 
-def get_Bprob(mypath, articles):
-    '''
-    Obtains keyword base probabilities for each article, according to the
-    in/out keywords.
-    '''
+def cleanAbstract(abstract):
+    """
+    """
     stpwrds = stopwords.words("english") +\
         ['find', 'data', 'observed', 'using', 'show', 'well',
          'around', 'used', 'thus', 'within', 'investigate', 'also',
@@ -150,29 +179,29 @@ def get_Bprob(mypath, articles):
     # Remove punctuation.
     translator = str.maketrans('', '', string.punctuation)
 
+    abstract = str(abstract).lower().translate(translator)
+    # Remove stopwords and some common words while maintaining
+    # abstract's order.
+    clean_abstract = ' '.join(
+        [w for w in list(OrderedDict.fromkeys(abstract.split()))
+         if w not in stpwrds])
+
+    return clean_abstract
+
+
+def get_Bprob(mypath, articles):
+    '''
+    Obtains Bayesian probabilities for each article.
+    '''
     try:
         with open(join(mypath, "classifier.pkl"), "rb") as f:
             cl = pickle.load(f)
 
-        # abst = []
         art_B_prob = []
         for art in articles:
-            title = str(art[1]).lower()
-            abstract = str(art[2]).lower().translate(translator)
-            # Remove stopwords and some common words while maintaining
-            # abstract's order.
-            abstract = ' '.join(
-                [w for w in list(OrderedDict.fromkeys(abstract.split()))
-                 if w not in stpwrds])
-
-            # abst.append(abstract)
-            # print("{:.3f}, {:.3f}, {:.3f}".format(
-            #     cl.prob_classify(title + ' ' + abstract).prob("neg"),
-            #     cl.prob_classify(title + ' ' + abstract).prob("meh"),
-            #     cl.prob_classify(title + ' ' + abstract).prob("pos")))
-
+            title, clean_abstract = str(art[1]).lower(), cleanAbstract(art[2])
             art_B_prob.append(
-                cl.prob_classify(title + ' ' + abstract).prob("pos"))
+                cl.prob_classify(title + ' ' + clean_abstract).prob("pos"))
 
         # from collections import Counter
         # print(Counter(w for w in ' '.join(abst).split() if len(w) >= 4))
@@ -210,61 +239,70 @@ def main():
     nltk.data.path.append(mypath)
 
     # Read accepted/rejected keywords and categories from file.
-    in_k, ou_k, categs = get_in_out()
+    mode, date_range, in_k, ou_k, categs = get_in_out()
 
-    # Get new data from all the selected categories.
-    articles = []
-    for cat_indx, categ in enumerate(categs):
+    dates_no_wknds = dateRange(mode, date_range)
 
-        # Get data from each category.
-        soup = get_arxiv_data(categ)
+    for day_week in dates_no_wknds:
 
-        # Store titles, links, authors and abstracts into list.
-        articles = articles + get_articles(soup)
+        # Get new data from all the selected categories.
+        articles = []
+        for cat_indx, categ in enumerate(categs):
 
-    print("Obtaining probabilities.")
-    # Obtain articles' probabilities according to keywords.
-    K_prob = get_Kprob(articles, in_k, ou_k)
-    # Obtain articles' probabilities based on Bayesian analysis.
-    B_prob, cl = get_Bprob(mypath, articles)
-    # Sort articles.
-    articles, K_prob, B_prob = sort_rev(articles, K_prob, B_prob)
+            # Get data from each category.
+            soup = get_arxiv_data(categ, day_week)
 
-    train = []
-    for i, art in enumerate(articles):
-        # Title
-        title = str(art[1])
-        print('\n' + str(i + 1) + ')', textwrap.fill(title, 77))
-        # Authors + arXiv link
-        authors = art[0] if len(art[0].split(',')) < 4 else\
-            ','.join(art[0].split(',')[:3]) + ', et al.'
-        print(textwrap.fill(authors, 77), '\n* ' + str(art[3]) + '\n')
-        # Abstract
-        abstract = str(art[2])
-        print(textwrap.fill(abstract, 80))
-        print("\nK_p: {:.2f}, B_p: {:.2f}".format(K_prob[i], B_prob[i]))
-        pn = input("B_p (1/2/3): ")
-        if pn == '1':
-            train.append([title + ' ' + abstract, 'neg'])
-        elif pn == '2':
-            train.append([title + ' ' + abstract, 'meh'])
-        elif pn == '3':
-            train.append([title + ' ' + abstract, 'pos'])
-        elif pn == "quit":
-            break
+            # Store titles, links, authors and abstracts into list.
+            articles = articles + get_articles(soup)
 
-    if train:
-        if cl:
-            # Update the classifier with the new training data
-            print("\nUpdating classifier.")
-            cl.update(train)
-        else:
-            # Generate classifier
-            print("\nGenerating classifier.")
-            cl = NaiveBayesClassifier(train)
+        print("\nObtaining probabilities.")
+        # Obtain articles' probabilities according to keywords.
+        K_prob = get_Kprob(articles, in_k, ou_k)
+        # Obtain articles' probabilities based on Bayesian analysis.
+        B_prob, cl = get_Bprob(mypath, articles)
+        # Sort articles.
+        articles, K_prob, B_prob = sort_rev(articles, K_prob, B_prob)
 
-        with open(join(mypath, "classifier.pkl"), "wb") as f:
-            pickle.dump(cl, f)
+        train = []
+        for i, art in enumerate(articles):
+            # Title
+            title = str(art[1])
+            print('\n' + str(i + 1) + ')', textwrap.fill(title, 77))
+            # Authors + arXiv link
+            authors = art[0] if len(art[0].split(',')) < 4 else\
+                ','.join(art[0].split(',')[:3]) + ', et al.'
+            print(textwrap.fill(authors, 77), '\n* ' + str(art[3]) + '\n')
+            # Abstract
+            print(textwrap.fill(str(art[2]), 80))
+            clean_abstract = cleanAbstract(str(art[2]))
+
+            print("\nK_p: {:.2f}, B_p: {:.2f}".format(K_prob[i], B_prob[i]))
+            if mode == 'train':
+                if 0 <= K_prob[i] < .1:
+                    train.append([title + ' ' + clean_abstract, 'neg'])
+                elif K_prob[i] > .75:
+                    train.append([title + ' ' + clean_abstract, 'pos'])
+            else:
+                pn = input("B_p (n/p): ")
+                if pn == 'n':
+                    train.append([title + ' ' + clean_abstract, 'neg'])
+                elif pn == 'p':
+                    train.append([title + ' ' + clean_abstract, 'pos'])
+                elif pn == "quit":
+                    break
+
+        if train:
+            if cl:
+                # Update the classifier with the new training data
+                print("\nUpdating classifier.")
+                cl.update(train)
+            else:
+                # Generate classifier
+                print("\nGenerating classifier.")
+                cl = NaiveBayesClassifier(train)
+
+            with open(join(mypath, "classifier.pkl"), "wb") as f:
+                pickle.dump(cl, f)
 
     print("Finished.")
 
