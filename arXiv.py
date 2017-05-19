@@ -305,7 +305,7 @@ def main():
             with open(join(mypath, "classifier.pkl"), "wb") as f:
                 pickle.dump(cl, f)
 
-    print("Finished.")
+    print("\nFinished.")
 
 
 if __name__ == "__main__":
