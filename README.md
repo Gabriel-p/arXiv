@@ -52,4 +52,4 @@ Statistics: **stat**
 
 ## Requirements
 
-Needs Python 3 and the `beautifulsoup4` package.
+Needs Python 3 and: `numpy`, `requests`, `beautifulsoup4`, `textblob` (pip), `lxml` (pip).

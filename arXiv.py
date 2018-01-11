@@ -217,7 +217,8 @@ def sort_rev(articles, K_prob, B_prob):
     Sort articles according to rank and reverse list so larger values
     will be located first in the list.
     '''
-    art_rank = (np.array(K_prob) + np.array(B_prob)) / 2.
+    # art_rank = (np.array(K_prob) + np.array(B_prob)) / 2.
+    art_rank = K_prob
     # Sort according to rank values.
     art_zip = list(zip(art_rank, articles, K_prob, B_prob))
     art_zip.sort()
@@ -244,66 +245,71 @@ def main():
     if mode == 'train':
         dates_no_wknds = dateRange(date_range)
 
-    for day_week in dates_no_wknds:
+    # articles = []
+    # for day_week in dates_no_wknds:
+    #     # Get new data from all the selected categories.
+    #     for cat_indx, categ in enumerate(categs):
 
-        # Get new data from all the selected categories.
-        articles = []
-        for cat_indx, categ in enumerate(categs):
+    #         # Get data from each category.
+    #         soup = get_arxiv_data(categ, day_week)
 
-            # Get data from each category.
-            soup = get_arxiv_data(categ, day_week)
+    #         # Store titles, links, authors and abstracts into list.
+    #         articles = articles + get_articles(soup)
 
-            # Store titles, links, authors and abstracts into list.
-            articles = articles + get_articles(soup)
+    import pickle
+    # with open('filename.pickle', 'wb') as f:
+    #     pickle.dump(articles, f)
+    with open('filename.pickle', 'rb') as f:
+        articles = pickle.load(f)
 
-        print("\nObtaining probabilities.")
-        # Obtain articles' probabilities according to keywords.
-        K_prob = get_Kprob(articles, in_k, ou_k)
-        # Obtain articles' probabilities based on Bayesian analysis.
-        B_prob, cl = get_Bprob(mypath, articles)
-        # Sort articles.
-        articles, K_prob, B_prob = sort_rev(articles, K_prob, B_prob)
+    print("\nObtaining probabilities.")
+    # Obtain articles' probabilities according to keywords.
+    K_prob = get_Kprob(articles, in_k, ou_k)
+    # Obtain articles' probabilities based on Bayesian analysis.
+    B_prob, cl = get_Bprob(mypath, articles)
+    # Sort articles.
+    articles, K_prob, B_prob = sort_rev(articles, K_prob, B_prob)
 
-        train = []
-        for i, art in enumerate(articles):
-            # Title
-            title = str(art[1])
-            print('\n' + str(i + 1) + ')', textwrap.fill(title, 77))
-            # Authors + arXiv link
-            authors = art[0] if len(art[0].split(',')) < 4 else\
-                ','.join(art[0].split(',')[:3]) + ', et al.'
-            print(textwrap.fill(authors, 77), '\n* ' + str(art[3]) + '\n')
-            # Abstract
-            print(textwrap.fill(str(art[2]), 80))
-            clean_abstract = cleanAbstract(str(art[2]))
+    train = []
+    for i, art in enumerate(articles):
+        # Title
+        title = str(art[1])
+        print('\n' + str(i + 1) + ')', textwrap.fill(title, 77))
+        # Authors + arXiv link
+        authors = art[0] if len(art[0].split(',')) < 4 else\
+            ','.join(art[0].split(',')[:3]) + ', et al.'
+        print(textwrap.fill(authors, 77), '\n* ' + str(art[3]) + '\n')
+        # Abstract
+        print(textwrap.fill(str(art[2]), 80))
+        clean_abstract = cleanAbstract(str(art[2]))
 
-            print("\nK_p: {:.2f}, B_p: {:.2f}".format(K_prob[i], B_prob[i]))
-            if mode == 'train':
-                if 0 <= K_prob[i] < .1:
-                    train.append([title + ' ' + clean_abstract, 'neg'])
-                elif K_prob[i] > .75:
-                    train.append([title + ' ' + clean_abstract, 'pos'])
-            else:
-                pn = input("B_p (n/p): ")
-                if pn == 'n':
-                    train.append([title + ' ' + clean_abstract, 'neg'])
-                elif pn == 'p':
-                    train.append([title + ' ' + clean_abstract, 'pos'])
-                elif pn == "quit":
-                    break
+        print("\nK_p: {:.2f}, B_p: {:.2f}".format(K_prob[i], B_prob[i]))
+        if mode == 'train':
+            if 0 <= K_prob[i] < .1:
+                train.append([title + ' ' + clean_abstract, 'neg'])
+            elif K_prob[i] > .75:
+                train.append([title + ' ' + clean_abstract, 'pos'])
+        else:
+            pn = input("B_p positive/negative (p/n): ")
+            if pn == 'n':
+                train.append([title + ' ' + clean_abstract, 'neg'])
+            elif pn == 'p':
+                train.append([title + ' ' + clean_abstract, 'pos'])
+            elif pn == "quit":
+                break
 
-        if train:
-            if cl:
-                # Update the classifier with the new training data
-                print("\nUpdating classifier.")
-                cl.update(train)
-            else:
-                # Generate classifier
-                print("\nGenerating classifier.")
-                cl = NaiveBayesClassifier(train)
+    if train:
+        if cl:
+            # Update the classifier with the new training data
+            print("\nUpdating classifier.")
+            cl.update(train)
+        else:
+            # Generate classifier
+            print("\nGenerating classifier.")
+            cl = NaiveBayesClassifier(train)
 
-            with open(join(mypath, "classifier.pkl"), "wb") as f:
-                pickle.dump(cl, f)
+        with open(join(mypath, "classifier.pkl"), "wb") as f:
+            pickle.dump(cl, f)
 
     print("\nFinished.")
 
