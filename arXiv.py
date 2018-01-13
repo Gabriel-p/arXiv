@@ -87,11 +87,6 @@ def get_arxiv_data(categ, day_week):
     html = requests.get(url)
     soup = BS(html.content, 'lxml')
 
-    # with open("temp", "wb") as f:
-    #     f.write(html.content)
-    # with open("temp", "rb") as f:
-    #     soup = BS(f, 'lxml')
-
     return soup
 
 
