@@ -165,6 +165,37 @@ def get_Kprob(articles, in_k, ou_k):
 
         art_K_prob.append(keywProbability(N_in, N_out))
 
+    art_rank = [0.] * len(articles)
+    # Loop through each article stored.
+    for art_indx, art in enumerate(articles):
+        # Search titles, abstract and authors list.
+        for ata_indx, lst in enumerate(art[:3]):
+
+            # Search for rejected words.
+            for ou_indx, ou_keyw in enumerate(ou_k):
+                # If the keyword is in any list.
+                if findWholeWord(ou_keyw, lst):
+                    # Assign a value based on its position
+                    # in the rejected keywords list (higher
+                    # values for earlier keywords)
+                    art_rank[art_indx] = art_rank[art_indx] - \
+                        ((3. - ata_indx) / (1. + ou_indx))
+
+            # Search for accepted keywords.
+            for in_indx, in_keyw in enumerate(in_k):
+                # If the keyword is in any list.
+                if findWholeWord(in_keyw, lst):
+                    # Assign a value based on its position
+                    # in the accepted keywords list (higher
+                    # values for earlier keywords)
+                    art_rank[art_indx] = art_rank[art_indx] + \
+                        ((3. - ata_indx) / (1. + in_indx))
+
+    # art_rank = (np.array(art_rank) - min(art_rank)) / (max(art_rank)- min(art_rank))
+    # import matplotlib.pyplot as plt
+    # plt.scatter(art_K_prob, art_rank)
+    # plt.show()
+
     return art_K_prob
 
 
@@ -242,9 +273,10 @@ def main():
     mode, date_range, in_k, ou_k, categs = get_in_out()
 
     dates_no_wknds = ['']
-    if mode == 'train':
+    if mode in ('train', 'range'):
         dates_no_wknds = dateRange(date_range)
 
+    # print("\nDownloading article(s) from arXiv.")
     # articles = []
     # for day_week in dates_no_wknds:
     #     # Get new data from all the selected categories.
@@ -262,7 +294,7 @@ def main():
     with open('filename.pickle', 'rb') as f:
         articles = pickle.load(f)
 
-    print("\nObtaining probabilities.")
+    print("Obtaining probabilities.")
     # Obtain articles' probabilities according to keywords.
     K_prob = get_Kprob(articles, in_k, ou_k)
     # Obtain articles' probabilities based on Bayesian analysis.
@@ -290,7 +322,9 @@ def main():
             elif K_prob[i] > .75:
                 train.append([title + ' ' + clean_abstract, 'pos'])
         else:
-            pn = input("B_p positive/negative (p/n): ")
+            # pn = input("B_p positive/negative (p/n): ")
+            import random
+            pn = random.choice(['p', 'n'])
             if pn == 'n':
                 train.append([title + ' ' + clean_abstract, 'neg'])
             elif pn == 'p':
@@ -308,8 +342,24 @@ def main():
             print("\nGenerating classifier.")
             cl = NaiveBayesClassifier(train)
 
+        # msgpack
+        import time as t
+        import msgpack
+        s = t.clock()
+        with open(join(mypath, "classifier.mpk"), "wb") as f:
+            msgpack.pack(cl, f)
+        print(s - t.clock())
+        # Plain
+        s = t.clock()
+        with open(join(mypath, "classifier.txt"), "w") as f:
+            for art in train:
+                f.write(textwrap.fill(str(art[0]), 80))
+        print(s - t.clock())
+        # Pickle
+        s = t.clock()
         with open(join(mypath, "classifier.pkl"), "wb") as f:
             pickle.dump(cl, f)
+        print(s - t.clock())
 
     print("\nFinished.")
 
