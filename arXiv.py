@@ -170,9 +170,9 @@ def main():
     elif mode == 'recent':
         print("\nDownloading recent arXiv data.")
     else:
-        print("Unknown mode {}".format())
-        raise ValueError
+        raise ValueError("Unknown mode '{}'".format(mode))
 
+    print("Categories selected: {}".format(', '.join(categs)))
     for day_week in dates_no_wknds:
 
         # Get new data from all the selected categories.
