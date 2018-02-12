@@ -19,7 +19,7 @@ def main():
     Query newly added articles to selected arXiv categories, rank them,
     print the ranked list, and ask for manual ranking.
     '''
-    # Read accepted/rejected keywords and categories from file.
+    # Read date range, arXiv categories, and classification mode.
     mode, date_range, categs, clmode = get_in_out()
 
     # Download articles from arXiv.
@@ -48,7 +48,7 @@ def get_in_out():
     Reads input parameters from file.
     '''
     categs = []
-    with open("keywords.dat", "r") as ff:
+    with open("in_params.dat", "r") as ff:
         for li in ff:
             if not li.startswith("#"):
                 # Mode.

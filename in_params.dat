@@ -1,0 +1,14 @@
+
+#  Articles: recent / range
+#
+#   Mode     start_date       end_date
+MO  range    2017-12-18     2018-01-12
+
+# TODO: 2017-12-18     2018-01-12
+
+#   Categories.
+CA  astro-ph
+
+#  Classification mode: NB / LR / MH / SVM / PC
+#
+CM   LR
