@@ -1,5 +1,7 @@
 keywords.dat
 temp.del
-input/*.pkl
+*.pkl
+*.pickle
 temp
+classifier.dat
 

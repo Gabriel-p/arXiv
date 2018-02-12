@@ -1,28 +1,53 @@
 
-import os
-from os.path import join, realpath, dirname
-import numpy as np
+from sklearn.pipeline import Pipeline
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import TfidfTransformer
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.linear_model import SGDClassifier
 
+import numpy as np
+import pandas as pd
 from bs4 import BeautifulSoup as BS
 import requests
-import re
-from collections import OrderedDict
 import shlex
 import textwrap
-import string
 from datetime import date, timedelta
-from textblob.classifiers import NaiveBayesClassifier
 
-import nltk.data
-from nltk.corpus import stopwords
-import pickle
+
+def main():
+    '''
+    Query newly added articles to selected arXiv categories, rank them,
+    print the ranked list, and ask for manual ranking.
+    '''
+    # Read accepted/rejected keywords and categories from file.
+    mode, date_range, categs, clmode = get_in_out()
+
+    # Download articles from arXiv.
+    articles = downArts(mode, date_range, categs)
+
+    # Read previous classifications.
+    wordsRank = readWords()
+
+    # Obtain articles' probabilities based on Bayesian analysis.
+    ranks, B_prob = get_Bprob(clmode, wordsRank, articles)
+
+    # Sort articles.
+    articles, ranks, B_prob = sort_rev(articles, ranks, B_prob)
+
+    # Manual ranking.
+    train = manualRank(articles, ranks, B_prob)
+
+    # Update classifier data.
+    updtRank(wordsRank, train)
+
+    print("\nFinished.")
 
 
 def get_in_out():
     '''
-    Reads in/out keywords from file.
+    Reads input parameters from file.
     '''
-    in_k, ou_k, categs = [], [], []
+    categs = []
     with open("keywords.dat", "r") as ff:
         for li in ff:
             if not li.startswith("#"):
@@ -35,18 +60,11 @@ def get_in_out():
                     # Store each keyword separately in list.
                     for i in shlex.split(li[3:]):
                         categs.append(i)
-                # Accepted keywords.
-                if li[0:2] == 'IN':
-                    # Store each keyword separately in list.
-                    for i in shlex.split(li[3:]):
-                        in_k.append(i)
-                # Rejected keywords.
-                if li[0:2] == 'OU':
-                    # Store each keyword separately in list.
-                    for i in shlex.split(li[3:]):
-                        ou_k.append(i)
+                # Classification mode.
+                if li[0:2] == 'CM':
+                    clmode = li.split()[1]
 
-    return mode, [start_date, end_date], in_k, ou_k, categs
+    return mode, [start_date, end_date], categs, clmode
 
 
 def dateRange(date_range):
@@ -74,11 +92,11 @@ def get_arxiv_data(categ, day_week):
     Downloads data from arXiv.
     '''
     if day_week == '':
-        print("\nDownloading latest arXiv data.")
+        print("Downloading latest arXiv data.")
         url = "http://arxiv.org/list/" + categ + "/new"
     else:
         year, month, day = day_week
-        print("\nDownloading arXiv data for {}-{}-{}.".format(
+        print("Downloading arXiv data for {}-{}-{}.".format(
             year, month, day))
         url = "https://arxiv.org/catchup?smonth=" + month + "&group=grp_&s" +\
               "day=" + day + "&num=50&archive=astro-ph&method=with&syear=" +\
@@ -93,6 +111,36 @@ def get_arxiv_data(categ, day_week):
     #     soup = BS(f, 'lxml')
 
     return soup
+
+
+def downArts(mode, date_range, categs):
+    """
+    Download articles from arXviv for all the categories selected, for the
+    dates chosen.
+    """
+    dates_no_wknds = ['']
+    if mode == 'range':
+        dates_no_wknds = dateRange(date_range)
+
+    # Download articles from arXiv.
+    articles = []
+    for day_week in dates_no_wknds:
+        # Get new data from all the selected categories.
+        for cat_indx, categ in enumerate(categs):
+
+            # Get data from each category.
+            soup = get_arxiv_data(categ, day_week)
+
+            # Store titles, links, authors and abstracts into list.
+            articles = articles + get_articles(soup)
+
+    # import pickle
+    # # with open('filename.pkl', 'wb') as f:
+    # #     pickle.dump(articles, f)
+    # with open('filename.pkl', 'rb') as f:
+    #     articles = pickle.load(f)
+
+    return articles
 
 
 def get_articles(soup):
@@ -118,250 +166,164 @@ def get_articles(soup):
     return articles
 
 
-def findWholeWord(w, string):
-    '''
-    Finds a single word or a sequence of words in the list 'string'.
-    Ignores upper/lowercasing. Returns True if 'w' was found and
-    False if it wasn't.
-    '''
-    pattern = re.compile(r'\b({0})\b'.format(w), flags=re.IGNORECASE)
-    return True if pattern.search(string) else False
-
-
-def keywProbability(N_in, N_out):
+def readWords():
     """
+    Read ranked words from input file.
     """
-    if (N_in + N_out) > 0:
-        K_p = max(0., (N_in - N_out) / (N_in + N_out))
-    else:
-        K_p = -1.
+    print("\nRead previous classification.")
+    try:
+        wordsRank = pd.read_csv(
+            "classifier.dat", header=None, names=("rank", "articles"))
+    except FileNotFoundError:
+        wordsRank = pd.DataFrame([])
 
-    return K_p
-
-
-def get_Kprob(articles, in_k, ou_k):
-    '''
-    Obtains keyword base probabilities for each article, according to the
-    in/out keywords.
-    '''
-    art_K_prob = []
-    # Loop through each article stored.
-    for i, art in enumerate(articles):
-        N_in, N_out = 0., 0.
-        # Search for rejected words.
-        for ou_keyw in ou_k:
-            # Search titles, abstract and authors list.
-            for words in art[:3]:
-                # If the keyword is in any list.
-                if findWholeWord(ou_keyw, words):
-                    N_out += N_out + 1.
-        # Search for accepted keywords.
-        for in_keyw in in_k:
-            # Search titles, abstract and authors list.
-            for words in art[:3]:
-                # If the keyword is in any list.
-                if findWholeWord(in_keyw, words):
-                    N_in += N_in + 1.
-
-        art_K_prob.append(keywProbability(N_in, N_out))
-
-    art_rank = [0.] * len(articles)
-    # Loop through each article stored.
-    for art_indx, art in enumerate(articles):
-        # Search titles, abstract and authors list.
-        for ata_indx, lst in enumerate(art[:3]):
-
-            # Search for rejected words.
-            for ou_indx, ou_keyw in enumerate(ou_k):
-                # If the keyword is in any list.
-                if findWholeWord(ou_keyw, lst):
-                    # Assign a value based on its position
-                    # in the rejected keywords list (higher
-                    # values for earlier keywords)
-                    art_rank[art_indx] = art_rank[art_indx] - \
-                        ((3. - ata_indx) / (1. + ou_indx))
-
-            # Search for accepted keywords.
-            for in_indx, in_keyw in enumerate(in_k):
-                # If the keyword is in any list.
-                if findWholeWord(in_keyw, lst):
-                    # Assign a value based on its position
-                    # in the accepted keywords list (higher
-                    # values for earlier keywords)
-                    art_rank[art_indx] = art_rank[art_indx] + \
-                        ((3. - ata_indx) / (1. + in_indx))
-
-    # art_rank = (np.array(art_rank) - min(art_rank)) / (max(art_rank)- min(art_rank))
-    # import matplotlib.pyplot as plt
-    # plt.scatter(art_K_prob, art_rank)
-    # plt.show()
-
-    return art_K_prob
+    return wordsRank
 
 
-def cleanAbstract(abstract):
-    """
-    """
-    stpwrds = stopwords.words("english") +\
-        ['find', 'data', 'observed', 'using', 'show', 'well',
-         'around', 'used', 'thus', 'within', 'investigate', 'also',
-         'recently', 'however']
-    # Remove punctuation.
-    translator = str.maketrans('', '', string.punctuation)
-
-    abstract = str(abstract).lower().translate(translator)
-    # Remove stopwords and some common words while maintaining
-    # abstract's order.
-    clean_abstract = ' '.join(
-        [w for w in list(OrderedDict.fromkeys(abstract.split()))
-         if w not in stpwrds])
-
-    return clean_abstract
-
-
-def get_Bprob(mypath, articles):
+def get_Bprob(clmode, wordsRank, articles):
     '''
     Obtains Bayesian probabilities for each article.
+
+    Based on the example: http://scikit-learn.org/stable/tutorial/
+    text_analytics/working_with_text_data.html
+
+    Uses the classes:
+    - sklearn.naive_bayes.MultinomialNB
+    - sklearn.linear_model.SGDClassifier
     '''
-    try:
-        with open(join(mypath, "classifier.pkl"), "rb") as f:
-            cl = pickle.load(f)
+    if not wordsRank.empty:
+        modes = {
+            'NB': 'Naive Bayes', 'LR': 'Logistic regression',
+            'MH': 'Modified Huber', 'SVM': 'Support Vector Machines',
+            'PC': 'Perceptron'}
+        print("Training classifier ({}).".format(modes[clmode]))
 
-        art_B_prob = []
-        for art in articles:
-            title, clean_abstract = str(art[1]).lower(), cleanAbstract(art[2])
-            art_B_prob.append(
-                cl.prob_classify(title + ' ' + clean_abstract).prob("pos"))
+        # Extract titles and abstracts.
+        titles, abstracts = list(zip(*articles))[1], list(zip(*articles))[2]
+        titlAbs = [_ + ' ' + abstracts[i] for i, _ in enumerate(titles)]
 
-        # from collections import Counter
-        # print(Counter(w for w in ' '.join(abst).split() if len(w) >= 4))
+        # This block is the same as the Pipeline() below, but done in parts.
+        # # Tokenizing text
+        # count_vect = CountVectorizer()
+        # X_train_counts = count_vect.fit_transform(wordsRank['articles'])
+        # # From occurrences to frequencies
+        # tfidf_transformer = TfidfTransformer()
+        # X_train_tfidf = tfidf_transformer.fit_transform(X_train_counts)
+        # # Training a classifier
+        # clf = MultinomialNB().fit(X_train_tfidf, wordsRank['rank'])
+        # # Predict based on titles and abstract data.
+        # X_new_counts = count_vect.transform(titlAbs)
+        # X_new_tfidf = tfidf_transformer.transform(X_new_counts)
+        # B_prob = clf.predict(X_new_tfidf)
 
-    except FileNotFoundError:
-        print("No previous classifier file found.\n")
-        art_B_prob, cl = [-1. for _ in articles], []
+        if clmode == 'NB':
+            # NaiveBayes
+            text_clf = Pipeline(
+                [('vect', CountVectorizer()), ('tfidf', TfidfTransformer()),
+                 ('clf', MultinomialNB())])
+        elif clmode == 'LR':
+            # Logistic regression
+            text_clf = Pipeline(
+                [('vect', CountVectorizer()), ('tfidf', TfidfTransformer()),
+                 ('clf', SGDClassifier(loss='log', max_iter=1000, tol=1e-3))])
+        elif clmode == 'MH':
+            # Modified Huber
+            text_clf = Pipeline(
+                [('vect', CountVectorizer()), ('tfidf', TfidfTransformer()),
+                 ('clf', SGDClassifier(
+                     loss='modified_huber', max_iter=1000, tol=1e-3))])
+        elif clmode == 'SVM':
+            # Support Vector Machines
+            text_clf = Pipeline(
+                [('vect', CountVectorizer()), ('tfidf', TfidfTransformer()),
+                 ('clf', SGDClassifier(max_iter=1000, tol=1e-3))])
+        elif clmode == 'PC':
+            # Perceptron
+            text_clf = Pipeline(
+                [('vect', CountVectorizer()), ('tfidf', TfidfTransformer()),
+                 ('clf', SGDClassifier(
+                     loss='perceptron', max_iter=1000, tol=1e-3))])
 
-    return art_B_prob, cl
+        # Train the model.
+        text_clf.fit(wordsRank['articles'], wordsRank['rank'])
+        # Predict classifications.
+        ranks = text_clf.predict(titlAbs)
+
+        # Probability estimates are only available for 'log' and
+        # 'modified Huber' loss when using the 'SGDClassifier()'.
+        if clmode not in ['SVM', 'PC']:
+            B_prob = text_clf.predict_proba(titlAbs).max(axis=1)
+        else:
+            print("  WARNING: probability estimates are not available"
+                  "for this method.")
+            B_prob = np.ones(len(articles))
+
+    else:
+        ranks, B_prob = [0 for _ in articles], [0 for _ in articles]
+        print("No previous classifier file found.")
+
+    return ranks, B_prob
 
 
-def sort_rev(articles, K_prob, B_prob):
+def sort_rev(articles, ranks, B_prob):
     '''
-    Sort articles according to rank and reverse list so larger values
-    will be located first in the list.
+    Sort articles according to rank values first and probabilities second
+    and reverse list so larger values  will be located first in the list.
     '''
-    # art_rank = (np.array(K_prob) + np.array(B_prob)) / 2.
-    art_rank = K_prob
-    # Sort according to rank values.
-    art_zip = list(zip(art_rank, articles, K_prob, B_prob))
-    art_zip.sort()
-    # Revert so larger values will be first.
-    art_s_rev = art_zip[::-1]
+    # Sort.
+    ranks, B_prob, articles = (
+        list(t) for t in zip(*sorted(zip(ranks, B_prob, articles))))
+    # Revert.
+    articles, ranks, B_prob = articles[::-1], ranks[::-1], B_prob[::-1]
 
-    articles, K_prob, B_prob = list(zip(*art_s_rev))[1:]
-
-    return articles, K_prob, B_prob
+    return articles, ranks, B_prob
 
 
-def main():
-    '''
-    Query newly added articles to selected arXiv categories, rank them
-    according to given keywords, and print out the ranked list.
-    '''
-    mypath = realpath(join(os.getcwd(), dirname(__file__), 'input'))
-    nltk.data.path.append(mypath)
+def manualRank(articles, ranks, B_prob):
+    """
+    Manually rank articles.
 
-    # Read accepted/rejected keywords and categories from file.
-    mode, date_range, in_k, ou_k, categs = get_in_out()
-
-    dates_no_wknds = ['']
-    if mode in ('train', 'range'):
-        dates_no_wknds = dateRange(date_range)
-
-    # print("\nDownloading article(s) from arXiv.")
-    # articles = []
-    # for day_week in dates_no_wknds:
-    #     # Get new data from all the selected categories.
-    #     for cat_indx, categ in enumerate(categs):
-
-    #         # Get data from each category.
-    #         soup = get_arxiv_data(categ, day_week)
-
-    #         # Store titles, links, authors and abstracts into list.
-    #         articles = articles + get_articles(soup)
-
-    import pickle
-    # with open('filename.pickle', 'wb') as f:
-    #     pickle.dump(articles, f)
-    with open('filename.pickle', 'rb') as f:
-        articles = pickle.load(f)
-
-    print("Obtaining probabilities.")
-    # Obtain articles' probabilities according to keywords.
-    K_prob = get_Kprob(articles, in_k, ou_k)
-    # Obtain articles' probabilities based on Bayesian analysis.
-    B_prob, cl = get_Bprob(mypath, articles)
-    # Sort articles.
-    articles, K_prob, B_prob = sort_rev(articles, K_prob, B_prob)
-
+    'q', 'quit', 'quit()', 'exit' exit the ranking process and stores
+    whatever was ranked at that point.
+    """
+    print("Articles to classify: {}".format(len(articles)))
     train = []
     for i, art in enumerate(articles):
-        # Title
-        title = str(art[1])
-        print('\n' + str(i + 1) + ')', textwrap.fill(title, 77))
-        # Authors + arXiv link
+        print('\n{}) R={:.0f}, P={:.2f}, ({})\n'.format(
+            str(i + 1), ranks[i], B_prob[i], art[3]))
+        # Authors
         authors = art[0] if len(art[0].split(',')) < 4 else\
             ','.join(art[0].split(',')[:3]) + ', et al.'
-        print(textwrap.fill(authors, 77), '\n* ' + str(art[3]) + '\n')
+        print(textwrap.fill(authors, 77) + '\n')
+        # Title
+        print(textwrap.fill(art[1], 75) + '\n')
         # Abstract
-        print(textwrap.fill(str(art[2]), 80))
-        clean_abstract = cleanAbstract(str(art[2]))
+        print(textwrap.fill(art[2], 80))
 
-        print("\nK_p: {:.2f}, B_p: {:.2f}".format(K_prob[i], B_prob[i]))
-        if mode == 'train':
-            if 0 <= K_prob[i] < .1:
-                train.append([title + ' ' + clean_abstract, 'neg'])
-            elif K_prob[i] > .75:
-                train.append([title + ' ' + clean_abstract, 'pos'])
-        else:
-            # pn = input("B_p positive/negative (p/n): ")
-            import random
-            pn = random.choice(['p', 'n'])
-            if pn == 'n':
-                train.append([title + ' ' + clean_abstract, 'neg'])
-            elif pn == 'p':
-                train.append([title + ' ' + clean_abstract, 'pos'])
-            elif pn == "quit":
+        # Manual ranking.
+        while True:
+            pn = input("Rank (0 to 4): ")
+            # import random
+            # pn = random.choice(['0', '1', '2', '3', '4'])
+            if pn in ['0', '1', '2', '3', '4']:
+                train.append([pn, art[1] + ' ' + art[2]])
                 break
+            elif pn == '':
+                break
+            elif pn in ['q', 'quit', 'quit()', 'exit']:
+                return train
 
-    if train:
-        if cl:
-            # Update the classifier with the new training data
-            print("\nUpdating classifier.")
-            cl.update(train)
-        else:
-            # Generate classifier
-            print("\nGenerating classifier.")
-            cl = NaiveBayesClassifier(train)
+    return train
 
-        # msgpack
-        import time as t
-        import msgpack
-        s = t.clock()
-        with open(join(mypath, "classifier.mpk"), "wb") as f:
-            msgpack.pack(cl, f)
-        print(s - t.clock())
-        # Plain
-        s = t.clock()
-        with open(join(mypath, "classifier.txt"), "w") as f:
-            for art in train:
-                f.write(textwrap.fill(str(art[0]), 80))
-        print(s - t.clock())
-        # Pickle
-        s = t.clock()
-        with open(join(mypath, "classifier.pkl"), "wb") as f:
-            pickle.dump(cl, f)
-        print(s - t.clock())
 
-    print("\nFinished.")
+def updtRank(wordsRank, train):
+    """
+    Update the ranked words file.
+    """
+    print("\nStoring new classified articles.")
+    train = pd.DataFrame(train, columns=("rank", "articles"))
+    df = wordsRank.append(train, ignore_index=True)
+    df.to_csv("classifier.dat", index=False, header=False)
 
 
 if __name__ == "__main__":
