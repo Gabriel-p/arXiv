@@ -29,13 +29,13 @@ def main():
     wordsRank = readWords()
 
     # Obtain articles' probabilities based on Bayesian analysis.
-    ranks, B_prob = get_Bprob(clmode, wordsRank, articles)
+    ranks, probs = get_Bprob(clmode, wordsRank, articles)
 
     # Sort articles.
-    articles, ranks, B_prob = sort_rev(articles, ranks, B_prob)
+    articles, ranks, probs = sort_rev(articles, ranks, probs)
 
     # Manual ranking.
-    train = manualRank(articles, dates, ranks, B_prob)
+    train = manualRank(articles, dates, ranks, probs)
 
     # Update classifier data.
     updtRank(wordsRank, train)
@@ -75,6 +75,8 @@ def dateRange(date_range):
     end_date = list(map(int, date_range[1].split('-')))
 
     ini_date, end_date = date(*start_date), date(*end_date)
+    if not ini_date < end_date:
+        raise ValueError("The 'end_date' must be larger than 'start_date'.")
 
     d, delta, weekend = ini_date, timedelta(days=1), [5, 6]
     dates_no_wknds = []
@@ -133,10 +135,22 @@ def downArts(mode, date_range, categs):
 
             # Store titles, links, authors and abstracts into list.
             date_arts = get_articles(soup)
-            articles = articles + date_arts
+
+            # Filter out duplicated articles.
+            if articles:
+                all_arts = list(zip(*articles))
+                no_dupl = []
+                for art in date_arts:
+                    if art[1] not in all_arts[1]:
+                        no_dupl.append(art)
+            else:
+                no_dupl = date_arts
+            # Add unique elements to list.
+            articles = articles + no_dupl
 
             # Dates
-            dates = dates + ['-'.join(day_week) for _ in date_arts]
+            dw = str(date.today()) if day_week == '' else day_week
+            dates = dates + ['-'.join(dw) for _ in no_dupl]
 
     # import pickle
     # # with open('filename.pkl', 'wb') as f:
@@ -218,7 +232,7 @@ def get_Bprob(clmode, wordsRank, articles):
         # # Predict based on titles and abstract data.
         # X_new_counts = count_vect.transform(titlAbs)
         # X_new_tfidf = tfidf_transformer.transform(X_new_counts)
-        # B_prob = clf.predict(X_new_tfidf)
+        # probs = clf.predict(X_new_tfidf)
 
         if clmode == 'NB':
             # NaiveBayes
@@ -256,34 +270,34 @@ def get_Bprob(clmode, wordsRank, articles):
         # Probability estimates are only available for 'log' and
         # 'modified Huber' loss when using the 'SGDClassifier()'.
         if clmode not in ['SVM', 'PC']:
-            B_prob = text_clf.predict_proba(titlAbs).max(axis=1)
+            probs = text_clf.predict_proba(titlAbs).max(axis=1)
         else:
             print("  WARNING: probability estimates are not available"
                   "for this method.")
-            B_prob = np.ones(len(articles))
+            probs = np.ones(len(articles))
 
     else:
-        ranks, B_prob = [0 for _ in articles], [0 for _ in articles]
+        ranks, probs = [0 for _ in articles], [0 for _ in articles]
         print("No previous classifier file found.")
 
-    return ranks, B_prob
+    return ranks, probs
 
 
-def sort_rev(articles, ranks, B_prob):
+def sort_rev(articles, ranks, probs):
     '''
     Sort articles according to rank values first and probabilities second
     and reverse list so larger values  will be located first in the list.
     '''
     # Sort.
-    ranks, B_prob, articles = (
-        list(t) for t in zip(*sorted(zip(ranks, B_prob, articles))))
+    ranks, probs, articles = (
+        list(t) for t in zip(*sorted(zip(ranks, probs, articles))))
     # Revert.
-    articles, ranks, B_prob = articles[::-1], ranks[::-1], B_prob[::-1]
+    articles, ranks, probs = articles[::-1], ranks[::-1], probs[::-1]
 
-    return articles, ranks, B_prob
+    return articles, ranks, probs
 
 
-def manualRank(articles, dates, ranks, B_prob):
+def manualRank(articles, dates, ranks, probs):
     """
     Manually rank articles.
 
@@ -294,7 +308,7 @@ def manualRank(articles, dates, ranks, B_prob):
     train = []
     for i, art in enumerate(articles):
         print('\n{}) R={:.0f}, P={:.2f}, ({})\n'.format(
-            str(i + 1), ranks[i], B_prob[i], art[3]))
+            str(i + 1), ranks[i], probs[i], art[3]))
         # Authors
         authors = art[0] if len(art[0].split(',')) < 4 else\
             ','.join(art[0].split(',')[:3]) + ', et al.'
