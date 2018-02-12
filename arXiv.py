@@ -23,7 +23,7 @@ def main():
     mode, date_range, categs, clmode = get_in_out()
 
     # Download articles from arXiv.
-    articles = downArts(mode, date_range, categs)
+    articles, dates = downArts(mode, date_range, categs)
 
     # Read previous classifications.
     wordsRank = readWords()
@@ -35,7 +35,7 @@ def main():
     articles, ranks, B_prob = sort_rev(articles, ranks, B_prob)
 
     # Manual ranking.
-    train = manualRank(articles, ranks, B_prob)
+    train = manualRank(articles, dates, ranks, B_prob)
 
     # Update classifier data.
     updtRank(wordsRank, train)
@@ -115,7 +115,7 @@ def get_arxiv_data(categ, day_week):
 
 def downArts(mode, date_range, categs):
     """
-    Download articles from arXviv for all the categories selected, for the
+    Download articles from arXiv for all the categories selected, for the
     dates chosen.
     """
     dates_no_wknds = ['']
@@ -123,7 +123,7 @@ def downArts(mode, date_range, categs):
         dates_no_wknds = dateRange(date_range)
 
     # Download articles from arXiv.
-    articles = []
+    articles, dates = [], []
     for day_week in dates_no_wknds:
         # Get new data from all the selected categories.
         for cat_indx, categ in enumerate(categs):
@@ -132,15 +132,19 @@ def downArts(mode, date_range, categs):
             soup = get_arxiv_data(categ, day_week)
 
             # Store titles, links, authors and abstracts into list.
-            articles = articles + get_articles(soup)
+            date_arts = get_articles(soup)
+            articles = articles + date_arts
+
+            # Dates
+            dates = dates + ['-'.join(day_week) for _ in date_arts]
 
     # import pickle
     # # with open('filename.pkl', 'wb') as f:
-    # #     pickle.dump(articles, f)
+    # #     pickle.dump((articles, dates), f)
     # with open('filename.pkl', 'rb') as f:
-    #     articles = pickle.load(f)
+    #     articles, dates = pickle.load(f)
 
-    return articles
+    return articles, dates
 
 
 def get_articles(soup):
@@ -173,7 +177,7 @@ def readWords():
     print("\nRead previous classification.")
     try:
         wordsRank = pd.read_csv(
-            "classifier.dat", header=None, names=("rank", "articles"))
+            "classifier.dat", header=None, names=("date", "rank", "articles"))
     except FileNotFoundError:
         wordsRank = pd.DataFrame([])
 
@@ -279,7 +283,7 @@ def sort_rev(articles, ranks, B_prob):
     return articles, ranks, B_prob
 
 
-def manualRank(articles, ranks, B_prob):
+def manualRank(articles, dates, ranks, B_prob):
     """
     Manually rank articles.
 
@@ -302,11 +306,11 @@ def manualRank(articles, ranks, B_prob):
 
         # Manual ranking.
         while True:
-            pn = input("Rank (0 to 4): ")
+            pn = input("Rank (1, 2, 3): ")
             # import random
-            # pn = random.choice(['0', '1', '2', '3', '4'])
-            if pn in ['0', '1', '2', '3', '4']:
-                train.append([pn, art[1] + ' ' + art[2]])
+            # pn = random.choice(['1', '2', '3'])
+            if pn in ['1', '2', '3']:
+                train.append([dates[i], int(pn), art[1] + ' ' + art[2]])
                 break
             elif pn == '':
                 break
@@ -321,9 +325,10 @@ def updtRank(wordsRank, train):
     Update the ranked words file.
     """
     print("\nStoring new classified articles.")
-    train = pd.DataFrame(train, columns=("rank", "articles"))
+    train = pd.DataFrame(train, columns=("date", "rank", "articles"))
     df = wordsRank.append(train, ignore_index=True)
-    df.to_csv("classifier.dat", index=False, header=False)
+    df_sort = df.sort_values('rank', ascending=False)
+    df_sort.to_csv("classifier.dat", index=False, header=False)
 
 
 if __name__ == "__main__":

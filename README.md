@@ -14,9 +14,9 @@ Ranked data is stored as a plain text csv file called `classifier.dat` with two
 columns: the ranking assigned, and article data used to classify it (title and
 abstract).
 
-The ranking is done assigning an integer from `0` to `4` to an article, where
-`0` means *"not interested at all"*, `2` means *"neutral"* and `4` means
-*"very interested"*.
+The ranking is done assigning an integer from `1, 2, 3` to an article, where
+`1` means *"not interested"*, `2` means *"neutral"* and `3` means
+*"interested"*.
 
 The predictions (automatic classification) is performed via either of these
 methods:
