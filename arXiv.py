@@ -12,33 +12,45 @@ import requests
 import shlex
 import textwrap
 from datetime import date, timedelta
+from dateutil.rrule import DAILY, rrule, MO, TU, WE, TH, FR
 
 
 def main():
     '''
     Query newly added articles to selected arXiv categories, rank them,
     print the ranked list, and ask for manual ranking.
+
+    Ranking:
+
+    1: Primary interest.
+    2: Secondary interest.
+    3: Tertiary interest.
+
     '''
+
     # Read date range, arXiv categories, and classification mode.
     mode, date_range, categs, clmode = get_in_out()
 
     # Download articles from arXiv.
     articles, dates = downArts(mode, date_range, categs)
 
-    # Read previous classifications.
-    wordsRank = readWords()
+    if articles:
+        # Read previous classifications.
+        wordsRank = readWords()
 
-    # Obtain articles' probabilities based on Bayesian analysis.
-    ranks, probs = get_Bprob(clmode, wordsRank, articles)
+        # Obtain articles' probabilities based on Bayesian analysis.
+        ranks, probs = get_Bprob(clmode, wordsRank, articles)
 
-    # Sort articles.
-    articles, ranks, probs = sort_rev(articles, ranks, probs)
+        # Sort articles.
+        articles, dates, ranks, probs = sort_rev(articles, dates, ranks, probs)
 
-    # Manual ranking.
-    train = manualRank(articles, dates, ranks, probs)
+        # Manual ranking.
+        train = manualRank(articles, dates, ranks, probs)
 
-    # Update classifier data.
-    updtRank(wordsRank, train)
+        # Update classifier data.
+        updtRank(wordsRank, train)
+    else:
+        print("No articles found for the date(s) selected.")
 
     print("\nFinished.")
 
@@ -89,11 +101,26 @@ def dateRange(date_range):
     return dates_no_wknds
 
 
-def get_arxiv_data(categ, day_week):
+def dateRandom():
+    """
+    Select random date, skipping weekends.
+    """
+
+    all_days = rrule(
+        DAILY, dtstart=date(1995, 1, 1), until=date.today(),
+        byweekday=(MO, TU, WE, TH, FR))
+    N_days = all_days.count()
+    r_idx = np.random.choice(range(N_days))
+    rand_date = [str(all_days[r_idx].date()).split('-')]
+
+    return rand_date
+
+
+def get_arxiv_data(categ, day_week, mode):
     '''
     Downloads data from arXiv.
     '''
-    if day_week == '':
+    if mode == 'recent':
         print("Downloading latest arXiv data.")
         url = "http://arxiv.org/list/" + categ + "/new"
     else:
@@ -120,9 +147,12 @@ def downArts(mode, date_range, categs):
     Download articles from arXiv for all the categories selected, for the
     dates chosen.
     """
-    dates_no_wknds = ['']
-    if mode == 'range':
+    if mode == 'recent':
+        dates_no_wknds = [str(date.today()).split('-')]
+    elif mode == 'range':
         dates_no_wknds = dateRange(date_range)
+    elif mode == 'random':
+        dates_no_wknds = dateRandom()
 
     # Download articles from arXiv.
     articles, dates = [], []
@@ -131,7 +161,7 @@ def downArts(mode, date_range, categs):
         for cat_indx, categ in enumerate(categs):
 
             # Get data from each category.
-            soup = get_arxiv_data(categ, day_week)
+            soup = get_arxiv_data(categ, day_week, mode)
 
             # Store titles, links, authors and abstracts into list.
             date_arts = get_articles(soup)
@@ -149,8 +179,7 @@ def downArts(mode, date_range, categs):
             articles = articles + no_dupl
 
             # Dates
-            dw = str(date.today()) if day_week == '' else day_week
-            dates = dates + ['-'.join(dw) for _ in no_dupl]
+            dates = dates + ['-'.join(day_week) for _ in no_dupl]
 
     # import pickle
     # # with open('filename.pkl', 'wb') as f:
@@ -186,7 +215,7 @@ def get_articles(soup):
 
 def readWords():
     """
-    Read ranked words from input file.
+    Read ranked articles from input classification file.
     """
     print("\nRead previous classification.")
     try:
@@ -200,7 +229,7 @@ def readWords():
 
 def get_Bprob(clmode, wordsRank, articles):
     '''
-    Obtains Bayesian probabilities for each article.
+    Rank and obtains probabilities for each article.
 
     Based on the example: http://scikit-learn.org/stable/tutorial/
     text_analytics/working_with_text_data.html
@@ -277,24 +306,25 @@ def get_Bprob(clmode, wordsRank, articles):
             probs = np.ones(len(articles))
 
     else:
-        ranks, probs = [0 for _ in articles], [0 for _ in articles]
+        ranks, probs = [0 for _ in articles], [0. for _ in articles]
         print("No previous classifier file found.")
 
     return ranks, probs
 
 
-def sort_rev(articles, ranks, probs):
+def sort_rev(articles, dates, ranks, probs):
     '''
     Sort articles according to rank values first and probabilities second
-    and reverse list so larger values  will be located first in the list.
+    in reverse order so larger probabilities will be positioned first.
     '''
     # Sort.
-    ranks, probs, articles = (
-        list(t) for t in zip(*sorted(zip(ranks, probs, articles))))
-    # Revert.
-    articles, ranks, probs = articles[::-1], ranks[::-1], probs[::-1]
+    ranks, probs, articles, dates = (
+        list(t) for t in zip(*sorted(zip(
+            ranks, -np.array(probs), articles, dates))))
+    # Revert back.
+    probs = -np.array(probs)
 
-    return articles, ranks, probs
+    return articles, dates, ranks, probs
 
 
 def manualRank(articles, dates, ranks, probs):
@@ -307,8 +337,8 @@ def manualRank(articles, dates, ranks, probs):
     print("Articles to classify: {}".format(len(articles)))
     train = []
     for i, art in enumerate(articles):
-        print('\n{}) R={:.0f}, P={:.2f}, ({})\n'.format(
-            str(i + 1), ranks[i], probs[i], art[3]))
+        print('\n{}) R={:.0f}, P={:.2f}, {} ({})\n'.format(
+            str(i + 1), ranks[i], probs[i], dates[i], art[3]))
         # Authors
         authors = art[0] if len(art[0].split(',')) < 4 else\
             ','.join(art[0].split(',')[:3]) + ', et al.'
@@ -326,8 +356,10 @@ def manualRank(articles, dates, ranks, probs):
             if pn in ['1', '2', '3']:
                 train.append([dates[i], int(pn), art[1] + ' ' + art[2]])
                 break
+            # Don't classify this article and move forward.
             elif pn == '':
                 break
+            # Quit training/classifying.
             elif pn in ['q', 'quit', 'quit()', 'exit']:
                 return train
 
@@ -341,7 +373,7 @@ def updtRank(wordsRank, train):
     print("\nStoring new classified articles.")
     train = pd.DataFrame(train, columns=("date", "rank", "articles"))
     df = wordsRank.append(train, ignore_index=True)
-    df_sort = df.sort_values('rank', ascending=False)
+    df_sort = df.sort_values('rank', ascending=True)
     df_sort.to_csv("classifier.dat", index=False, header=False)
 
 
