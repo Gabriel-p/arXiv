@@ -15,10 +15,10 @@ columns: the ranking assigned, and article data used to classify it (title and
 abstract).
 
 The ranking is done assigning an integer from `1, 2, 3` to an article, where
-`1` means *"not interested"*, `2` means *"neutral"* and `3` means
-*"interested"*.
+`1` means *"Primary interest"*, `2` means *"Secondary interest"* and `3` means
+*"Tertiary interest"*.
 
-The predictions (automatic classification) is performed via either of these
+The predictions (automatic classification) is performed via either one of these
 methods:
 - `NB`: [Naive Bayes classifier for multinomial models](http://scikit-learn.org/stable/modules/generated/sklearn.naive_bayes.MultinomialNB.html)
 - [Linear classifiers with SGD training](http://scikit-learn.org/stable/modules/generated/sklearn.linear_model.SGDClassifier.html)
