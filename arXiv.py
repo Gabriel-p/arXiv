@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup as BS
 import requests
 import shlex
 import textwrap
+from itertools import groupby
 from datetime import date, timedelta
 from dateutil.rrule import DAILY, rrule, MO, TU, WE, TH, FR
 
@@ -29,7 +30,7 @@ def main():
     '''
 
     # Read date range, arXiv categories, and classification mode.
-    mode, date_range, categs, clmode = get_in_out()
+    mode, date_range, categs, groups, clmode = get_in_out()
 
     # Download articles from arXiv.
     articles, dates = downArts(mode, date_range, categs)
@@ -38,14 +39,14 @@ def main():
         # Read previous classifications.
         wordsRank = readWords()
 
-        # Obtain articles' probabilities based on Bayesian analysis.
+        # Obtain articles' probabilities based on ML analysis.
         ranks, probs = get_Bprob(clmode, wordsRank, articles)
 
-        # Sort articles.
-        articles, dates, ranks, probs = sort_rev(articles, dates, ranks, probs)
+        # Sort and group articles.
+        grpd_arts = sort_rev(articles, dates, ranks, probs)
 
         # Manual ranking.
-        train = manualRank(articles, dates, ranks, probs)
+        train = manualRank(groups, grpd_arts)
 
         # Update classifier data.
         updtRank(wordsRank, train)
@@ -59,7 +60,7 @@ def get_in_out():
     '''
     Reads input parameters from file.
     '''
-    categs = []
+    categs, groups = [], []
     with open("in_params.dat", "r") as ff:
         for li in ff:
             if not li.startswith("#"):
@@ -75,8 +76,12 @@ def get_in_out():
                 # Classification mode.
                 if li[0:2] == 'CM':
                     clmode = li.split()[1]
+                if li[0:2] == 'IG':
+                    # Store each keyword separately in list.
+                    for i in shlex.split(li[3:]):
+                        groups.append(i)
 
-    return mode, [start_date, end_date], categs, clmode
+    return mode, [start_date, end_date], categs, groups, clmode
 
 
 def dateRange(date_range):
@@ -316,6 +321,8 @@ def sort_rev(articles, dates, ranks, probs):
     '''
     Sort articles according to rank values first and probabilities second
     in reverse order so larger probabilities will be positioned first.
+
+    Group articles in groups by ranks.
     '''
     # Sort.
     ranks, probs, articles, dates = (
@@ -324,43 +331,85 @@ def sort_rev(articles, dates, ranks, probs):
     # Revert back.
     probs = -np.array(probs)
 
-    return articles, dates, ranks, probs
+    # Group by ranks.
+    data = list(zip(*[ranks, probs, articles, dates]))
+    c = groupby(data, lambda x: x[0])
+    grpd_arts = {}
+    for k, group in c:
+        grpd_arts[k] = list(group)
+    # To list and sublists.
+    grpd_arts = [list(_) for _ in grpd_arts.values()]
+
+    return grpd_arts
 
 
-def manualRank(articles, dates, ranks, probs):
+def artClass(gr_ids, N_groups, rank):
+    """
+    Manual ranking.
+    """
+    while True:
+        pn = input("Rank (1,..,{}): ".format(N_groups))
+        # import random
+        # pn = random.choice(['1', '2', '3'])
+        if pn in gr_ids:
+            return pn
+        # Jump to next group.
+        elif pn == 'ng':
+            if str(rank + 1) in gr_ids:
+                print("\nJump to next group.")
+                return 'next_gr'
+            else:
+                print(" No such group '{}' exists.".format(rank + 1))
+        # Empty string means don't classify this article and move forward.
+        # Rest of options mean "Quit training/classifying."
+        elif pn in ['', 'q', 'quit', 'quit()', 'exit']:
+            return pn
+
+
+def manualRank(groups, grpd_arts):
     """
     Manually rank articles.
 
     'q', 'quit', 'quit()', 'exit' exit the ranking process and stores
     whatever was ranked at that point.
     """
-    print("Articles to classify: {}".format(len(articles)))
-    train = []
-    for i, art in enumerate(articles):
-        print('\n{}) R={:.0f}, P={:.2f}, {} ({})\n'.format(
-            str(i + 1), ranks[i], probs[i], dates[i], art[3]))
-        # Authors
-        authors = art[0] if len(art[0].split(',')) < 4 else\
-            ','.join(art[0].split(',')[:3]) + ', et al.'
-        print(textwrap.fill(authors, 77) + '\n')
-        # Title
-        print(textwrap.fill(art[1], 75) + '\n')
-        # Abstract
-        print(textwrap.fill(art[2], 80))
+    gr_ids = [str(_) for _ in range(1, len(groups) + 1)]
+    print("\nUser groups defined:")
+    for i, g in enumerate(groups):
+        print(" {}: {}".format(i + 1, g))
 
-        # Manual ranking.
-        while True:
-            pn = input("Rank (1, 2, 3): ")
-            # import random
-            # pn = random.choice(['1', '2', '3'])
-            if pn in ['1', '2', '3']:
-                train.append([dates[i], int(pn), art[1] + ' ' + art[2]])
+    N_groups = len(groups)
+    N_arts = sum([len(_) for _ in grpd_arts])
+    print("\nArticles to classify: {}".format(N_arts))
+    train = []
+    for articles_gr in grpd_arts:
+
+        for i, data in enumerate(articles_gr):
+            rank, prob, art, date = data
+
+            print('\n{}) R={:.0f}, P={:.2f}, {} ({})\n'.format(
+                str(i + 1), rank, prob, date, art[3]))
+            # Authors
+            authors = art[0] if len(art[0].split(',')) < 4 else\
+                ','.join(art[0].split(',')[:3]) + ', et al.'
+            print(textwrap.fill(authors, 77) + '\n')
+            # Title
+            print(textwrap.fill(art[1], 75) + '\n')
+            # Abstract
+            print(textwrap.fill(art[2], 80))
+
+            answ = artClass(gr_ids, N_groups, rank)
+
+            if answ in gr_ids:
+                train.append([date, int(answ), art[1] + ' ' + art[2]])
+            # Jump to next group.
+            elif answ == 'next_gr':
                 break
             # Don't classify this article and move forward.
-            elif pn == '':
-                break
+            elif answ == '':
+                pass
             # Quit training/classifying.
-            elif pn in ['q', 'quit', 'quit()', 'exit']:
+            elif answ in ['q', 'quit', 'quit()', 'exit']:
                 return train
 
     return train

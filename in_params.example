@@ -1,5 +1,5 @@
 
-#  Articles: recent / range / random
+#   Articles: recent / range / random
 #
 #   Mode     start_date       end_date
 MO  recent    2018-01-01     2018-01-30
@@ -7,6 +7,10 @@ MO  recent    2018-01-01     2018-01-30
 #   Categories.
 CA  astro-ph
 
-#  Classification mode: NB / LR / MH / SVM / PC
+#   Classification mode: NB / LR / MH / SVM / PC
 #
-CM   NB
+CM  NB
+
+#   Interest groups.
+#
+IG  star_clusters  galaxy  dark_matter
