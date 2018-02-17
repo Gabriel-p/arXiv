@@ -26,6 +26,7 @@ def main():
     1: Primary interest.
     2: Secondary interest.
     3: Tertiary interest.
+    4: ....
 
     '''
 
@@ -81,6 +82,8 @@ def get_in_out():
                     for i in shlex.split(li[3:]):
                         groups.append(i)
 
+    print("\nRunning '{}' mode.".format(mode))
+    print("Classifier '{}' selected.\n".format(clmode))
     return mode, [start_date, end_date], categs, groups, clmode
 
 
@@ -92,7 +95,7 @@ def dateRange(date_range):
     end_date = list(map(int, date_range[1].split('-')))
 
     ini_date, end_date = date(*start_date), date(*end_date)
-    if not ini_date < end_date:
+    if ini_date > end_date:
         raise ValueError("The 'end_date' must be larger than 'start_date'.")
 
     d, delta, weekend = ini_date, timedelta(days=1), [5, 6]
@@ -130,7 +133,7 @@ def get_arxiv_data(categ, day_week, mode):
         url = "http://arxiv.org/list/" + categ + "/new"
     else:
         year, month, day = day_week
-        print("Downloading arXiv data for {}-{}-{}.".format(
+        print("Downloading arXiv data for {}-{}-{}".format(
             year, month, day))
         url = "https://arxiv.org/catchup?smonth=" + month + "&group=grp_&s" +\
               "day=" + day + "&num=50&archive=astro-ph&method=with&syear=" +\
@@ -343,12 +346,12 @@ def sort_rev(articles, dates, ranks, probs):
     return grpd_arts
 
 
-def artClass(gr_ids, N_groups, rank):
+def artClass(gr_ids, rank):
     """
     Manual ranking.
     """
     while True:
-        pn = input("Rank (1,..,{}): ".format(N_groups))
+        pn = input("Rank (1,..,{}): ".format(len(gr_ids)))
         # import random
         # pn = random.choice(['1', '2', '3'])
         if pn in gr_ids:
@@ -373,22 +376,28 @@ def manualRank(groups, grpd_arts):
     'q', 'quit', 'quit()', 'exit' exit the ranking process and stores
     whatever was ranked at that point.
     """
+    # Ids of all defined groups starting from 1, as strings.
     gr_ids = [str(_) for _ in range(1, len(groups) + 1)]
-    print("\nUser groups defined:")
-    for i, g in enumerate(groups):
-        print(" {}: {}".format(i + 1, g))
-
-    N_groups = len(groups)
+    # Total number of articles.
     N_arts = sum([len(_) for _ in grpd_arts])
-    print("\nArticles to classify: {}".format(N_arts))
-    train = []
-    for articles_gr in grpd_arts:
 
-        for i, data in enumerate(articles_gr):
+    print("\nTotal number of articles to classify: {}".format(N_arts))
+    print("\nArticles per group defined:")
+    for i, g in enumerate(groups):
+        print(" {} ({}): {}".format(i + 1, g, len(grpd_arts[i])))
+
+    train = []
+    # For each defined group.
+    for i, articles_gr in enumerate(grpd_arts):
+        print("\n* Articles classified in group {} ({})".format(
+            i + 1, groups[i]))
+
+        # For each article in this group.
+        for j, data in enumerate(articles_gr):
             rank, prob, art, date = data
 
             print('\n{}) R={:.0f}, P={:.2f}, {} ({})\n'.format(
-                str(i + 1), rank, prob, date, art[3]))
+                str(j + 1), rank, prob, date, art[3]))
             # Authors
             authors = art[0] if len(art[0].split(',')) < 4 else\
                 ','.join(art[0].split(',')[:3]) + ', et al.'
@@ -398,7 +407,7 @@ def manualRank(groups, grpd_arts):
             # Abstract
             print(textwrap.fill(art[2], 80))
 
-            answ = artClass(gr_ids, N_groups, rank)
+            answ = artClass(gr_ids, rank)
 
             if answ in gr_ids:
                 train.append([date, int(answ), art[1] + ' ' + art[2]])
@@ -419,11 +428,20 @@ def updtRank(wordsRank, train):
     """
     Update the ranked words file.
     """
-    print("\nStoring new classified articles.")
-    train = pd.DataFrame(train, columns=("date", "rank", "articles"))
-    df = wordsRank.append(train, ignore_index=True)
-    df_sort = df.sort_values('rank', ascending=True)
-    df_sort.to_csv("classifier.dat", index=False, header=False)
+    if train:
+        print("\nStoring {} new classified articles.".format(len(train)))
+        train = pd.DataFrame(train, columns=("date", "rank", "articles"))
+        # Append existing classification with new one.
+        df = wordsRank.append(train, ignore_index=True)
+        # Sort according to groups (rank)
+        df_sort = df.sort_values('rank', ascending=True)
+        # Remove duplicated entried with matchin ranks and data.
+        df_unq = df_sort.drop_duplicates(subset=['rank', 'articles'])
+        if len(df_unq) < len(df_sort):
+            print("Dropping {} duplicated articles.".format(
+                len(df_sort) - len(df_unq)))
+        # Write to article.
+        df_unq.to_csv("classifier.dat", index=False, header=False)
 
 
 if __name__ == "__main__":
