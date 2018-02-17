@@ -9,6 +9,14 @@ CA  astro-ph
 
 #   Classification mode: NB / LR / MH / SVM / PC
 #
+#   NB: Naive Bayes
+#   LR: Logistic regression
+#   MH: Modified Huber
+#   SVM: Support Vector Machines (*)
+#   PC:  Perceptron (*)
+#
+#   (*) probability estimates not available
+#
 CM  NB
 
 #   Interest groups.
