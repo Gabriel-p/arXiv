@@ -12,6 +12,7 @@ import requests
 import shlex
 import textwrap
 from itertools import groupby
+from shutil import copyfile
 from datetime import date, timedelta
 from dateutil.rrule import DAILY, rrule, MO, TU, WE, TH, FR
 
@@ -40,21 +41,25 @@ def main():
         # Read previous classifications.
         wordsRank = readWords()
 
-        # Obtain articles' probabilities based on ML analysis.
-        ranks, probs = get_Bprob(clmode, wordsRank, articles)
+        if mode != 'zotero':
+            # Obtain articles' probabilities based on ML analysis.
+            ranks, probs = get_Bprob(clmode, wordsRank, articles)
 
-        # Sort and group articles.
-        grpd_arts = sort_rev(articles, dates, ranks, probs)
+            # Sort and group articles.
+            grpd_arts = sort_rev(articles, dates, ranks, probs)
 
-        # Manual ranking.
-        train = manualRank(groups, grpd_arts)
+            # Manual ranking.
+            train = manualRank(groups, grpd_arts)
+        else:
+            # Zotero ranking.
+            train = zotRank(groups, articles, dates)
 
         # Update classifier data.
         updtRank(wordsRank, train)
     else:
         print("No articles found for the date(s) selected.")
 
-    print("\nFinished.")
+    print("\nGoodbye.")
 
 
 def get_in_out():
@@ -87,6 +92,57 @@ def get_in_out():
     return mode, [start_date, end_date], categs, groups, clmode
 
 
+def downArts(mode, date_range, categs):
+    """
+    Download articles from arXiv for all the categories selected, for the
+    dates chosen.
+    """
+    if mode == 'recent':
+        dates_no_wknds = [str(date.today()).split('-')]
+    elif mode == 'range':
+        dates_no_wknds = dateRange(date_range)
+    elif mode == 'random':
+        dates_no_wknds = dateRandom()
+
+    if mode == 'zotero':
+        articles, dates = readZotero()
+    else:
+        # Download articles from arXiv.
+        articles, dates = [], []
+        for day_week in dates_no_wknds:
+            # Get new data from all the selected categories.
+            for cat_indx, categ in enumerate(categs):
+
+                # Get data from each category.
+                soup = get_arxiv_data(categ, day_week, mode)
+
+                # Store titles, links, authors and abstracts into list.
+                date_arts = get_articles(soup)
+
+                # Filter out duplicated articles.
+                if articles:
+                    all_arts = list(zip(*articles))
+                    no_dupl = []
+                    for art in date_arts:
+                        if art[1] not in all_arts[1]:
+                            no_dupl.append(art)
+                else:
+                    no_dupl = date_arts
+                # Add unique elements to list.
+                articles = articles + no_dupl
+
+                # Dates
+                dates = dates + ['-'.join(day_week) for _ in no_dupl]
+
+    # import pickle
+    # # with open('filename.pkl', 'wb') as f:
+    # #     pickle.dump((articles, dates), f)
+    # with open('filename.pkl', 'rb') as f:
+    #     articles, dates = pickle.load(f)
+
+    return articles, dates
+
+
 def dateRange(date_range):
     """
     Store individual dates for a range, skipping weekends.
@@ -113,15 +169,45 @@ def dateRandom():
     """
     Select random date, skipping weekends.
     """
+    init_date = date(2006, 1, 2)  # date(1995, 1, 1)
 
     all_days = rrule(
-        DAILY, dtstart=date(1995, 1, 1), until=date.today(),
+        DAILY, dtstart=init_date, until=date.today(),
         byweekday=(MO, TU, WE, TH, FR))
     N_days = all_days.count()
     r_idx = np.random.choice(range(N_days))
     rand_date = [str(all_days[r_idx].date()).split('-')]
 
     return rand_date
+
+
+def readZotero():
+    """
+    Read a Zotero .csv file generated using: 'Export collection' with
+    'Format: CSV' not exporting notes.
+    """
+    print("Read Zotero CSV file.")
+    zot = pd.read_csv(
+        "zotero.csv",
+        usecols=('Author', 'Title', 'Abstract Note', 'Url', 'Date'))
+    N_orig = len(zot)
+
+    # Drop al 'Nan' values that might be present.
+    zot = zot.dropna(axis=0, how='any')
+    # Drop articles with no abstracts available.
+    zot = zot[zot['Abstract Note'] != "Not Available"]
+
+    # Re order, drop dates.
+    art_data = zot[['Author', 'Title', 'Abstract Note', 'Url']]
+
+    # Pack in required format.
+    articles = list(zip(*[list(art_data[_]) for _ in art_data]))
+    dates = list(zot['Date'])
+
+    print("{} articles read, {} have all the needed data.".format(
+        N_orig, len(art_data)))
+
+    return articles, dates
 
 
 def get_arxiv_data(categ, day_week, mode):
@@ -136,8 +222,8 @@ def get_arxiv_data(categ, day_week, mode):
         print("Downloading arXiv data for {}-{}-{}".format(
             year, month, day))
         url = "https://arxiv.org/catchup?smonth=" + month + "&group=grp_&s" +\
-              "day=" + day + "&num=50&archive=astro-ph&method=with&syear=" +\
-              year
+              "day=" + day + "&num=50&archive=" + categ +\
+              "&method=with&syear=" + year
 
     html = requests.get(url)
     soup = BS(html.content, 'lxml')
@@ -148,54 +234,6 @@ def get_arxiv_data(categ, day_week, mode):
     #     soup = BS(f, 'lxml')
 
     return soup
-
-
-def downArts(mode, date_range, categs):
-    """
-    Download articles from arXiv for all the categories selected, for the
-    dates chosen.
-    """
-    if mode == 'recent':
-        dates_no_wknds = [str(date.today()).split('-')]
-    elif mode == 'range':
-        dates_no_wknds = dateRange(date_range)
-    elif mode == 'random':
-        dates_no_wknds = dateRandom()
-
-    # Download articles from arXiv.
-    articles, dates = [], []
-    for day_week in dates_no_wknds:
-        # Get new data from all the selected categories.
-        for cat_indx, categ in enumerate(categs):
-
-            # Get data from each category.
-            soup = get_arxiv_data(categ, day_week, mode)
-
-            # Store titles, links, authors and abstracts into list.
-            date_arts = get_articles(soup)
-
-            # Filter out duplicated articles.
-            if articles:
-                all_arts = list(zip(*articles))
-                no_dupl = []
-                for art in date_arts:
-                    if art[1] not in all_arts[1]:
-                        no_dupl.append(art)
-            else:
-                no_dupl = date_arts
-            # Add unique elements to list.
-            articles = articles + no_dupl
-
-            # Dates
-            dates = dates + ['-'.join(day_week) for _ in no_dupl]
-
-    # import pickle
-    # # with open('filename.pkl', 'wb') as f:
-    # #     pickle.dump((articles, dates), f)
-    # with open('filename.pkl', 'rb') as f:
-    #     articles, dates = pickle.load(f)
-
-    return articles, dates
 
 
 def get_articles(soup):
@@ -346,29 +384,6 @@ def sort_rev(articles, dates, ranks, probs):
     return grpd_arts
 
 
-def artClass(gr_ids, rank):
-    """
-    Manual ranking.
-    """
-    while True:
-        pn = input("Rank (1,..,{}): ".format(len(gr_ids)))
-        # import random
-        # pn = random.choice(['1', '2', '3'])
-        if pn in gr_ids:
-            return pn
-        # Jump to next group.
-        elif pn == 'ng':
-            if str(rank + 1) in gr_ids:
-                print("\nJump to next group.")
-                return 'next_gr'
-            else:
-                print(" No such group '{}' exists.".format(rank + 1))
-        # Empty string means don't classify this article and move forward.
-        # Rest of options mean "Quit training/classifying."
-        elif pn in ['', 'q', 'quit', 'quit()', 'exit']:
-            return pn
-
-
 def manualRank(groups, grpd_arts):
     """
     Manually rank articles.
@@ -384,7 +399,10 @@ def manualRank(groups, grpd_arts):
     print("\nTotal number of articles to classify: {}".format(N_arts))
     print("\nArticles per group defined:")
     for i, g in enumerate(groups):
-        print(" {} ({}): {}".format(i + 1, g, len(grpd_arts[i])))
+        try:
+            print(" {} ({}): {}".format(i + 1, g, len(grpd_arts[i])))
+        except IndexError:
+            print(" {} ({}): {}".format(i + 1, g, 0))
 
     train = []
     # For each defined group.
@@ -424,11 +442,62 @@ def manualRank(groups, grpd_arts):
     return train
 
 
+def zotRank(groups, articles, dates):
+    """
+    Assign a rank to Zotero articles.
+    """
+    print("\nGroups defined:")
+    for i, g in enumerate(groups):
+        print(" {}: {}".format(i + 1, g))
+
+    # Ids of all defined groups starting from 1, as strings.
+    gr_ids = [str(_) for _ in range(1, len(groups) + 1)]
+
+    print("\nAssign a group for Zotero entries read.")
+    while True:
+        pn = input("Group (1,..,{}): ".format(len(gr_ids)))
+        if pn in gr_ids:
+            break
+
+    train = []
+    for i, art in enumerate(articles):
+        train.append([dates[i], int(pn), art[1] + ' ' + art[2]])
+
+    return train
+
+
+def artClass(gr_ids, rank):
+    """
+    Manual ranking.
+    """
+    while True:
+        pn = input("Group (1,..,{}): ".format(len(gr_ids)))
+        # import random
+        # pn = random.choice(['1', '2', '3'])
+        if pn in gr_ids:
+            return pn
+        # Jump to next group.
+        elif pn == 'ng':
+            if str(rank + 1) in gr_ids:
+                print("\nJump to next group.")
+                return 'next_gr'
+            else:
+                print(" No such group '{}' exists.".format(rank + 1))
+        # Empty string means don't classify this article and move forward.
+        # Rest of options mean "Quit training/classifying."
+        elif pn in ['', 'q', 'quit', 'quit()', 'exit']:
+            return pn
+
+
 def updtRank(wordsRank, train):
     """
     Update the ranked words file.
     """
     if train:
+
+        # Back up classifier file.
+        copyfile("classifier.dat", "classifier_bck.dat")
+
         print("\nStoring {} new classified articles.".format(len(train)))
         train = pd.DataFrame(train, columns=("date", "rank", "articles"))
         # Append existing classification with new one.
