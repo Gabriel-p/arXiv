@@ -4,4 +4,6 @@ temp.del
 *.pickle
 temp
 classifier.dat
+classifier_bck.dat
+*.csv
 
