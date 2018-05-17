@@ -12,6 +12,7 @@ import requests
 import shlex
 import textwrap
 from itertools import groupby
+from operator import itemgetter
 from shutil import copyfile
 from datetime import date, timedelta
 from dateutil.rrule import DAILY, rrule, MO, TU, WE, TH, FR
@@ -32,7 +33,7 @@ def main():
     '''
 
     # Read date range, arXiv categories, and classification mode.
-    mode, date_range, categs, groups, clmode = get_in_out()
+    mode, date_range, categs, groups, gr_ids, clmode = get_in_out()
 
     # Download articles from arXiv.
     articles, dates = downArts(mode, date_range, categs)
@@ -46,13 +47,13 @@ def main():
             ranks, probs = get_Bprob(clmode, wordsRank, articles)
 
             # Sort and group articles.
-            grpd_arts = sort_rev(articles, dates, ranks, probs)
+            grpd_arts, gr_len = sort_rev(gr_ids, articles, dates, ranks, probs)
 
             # Manual ranking.
-            train = manualRank(groups, grpd_arts)
+            train = manualRank(groups, gr_ids, grpd_arts, gr_len)
         else:
             # Zotero ranking.
-            train = zotRank(groups, articles, dates)
+            train = zotRank(groups, gr_ids, articles, dates)
 
         # Update classifier data.
         updtRank(wordsRank, train)
@@ -77,19 +78,25 @@ def get_in_out():
                 # Categories.
                 if li[0:2] == 'CA':
                     # Store each keyword separately in list.
-                    for i in shlex.split(li[3:]):
-                        categs.append(i)
+                    for k in shlex.split(li[3:]):
+                        categs.append(k)
                 # Classification mode.
                 if li[0:2] == 'CM':
                     clmode = li.split()[1]
                 if li[0:2] == 'IG':
                     # Store each keyword separately in list.
-                    for i in shlex.split(li[3:]):
-                        groups.append(i)
+                    for k in shlex.split(li[3:]):
+                        groups.append(k)
+
+    # Add 'not_interested' group at the end.
+    groups.append('not_interested')
+
+    # Ids of all defined groups starting from 1, as strings.
+    gr_ids = [str(_) for _ in range(1, len(groups))] + ['n']
 
     print("\nRunning '{}' mode.".format(mode))
     print("Classifier '{}' selected.\n".format(clmode))
-    return mode, [start_date, end_date], categs, groups, clmode
+    return mode, [start_date, end_date], categs, groups, gr_ids, clmode
 
 
 def downArts(mode, date_range, categs):
@@ -358,12 +365,12 @@ def get_Bprob(clmode, wordsRank, articles):
     return ranks, probs
 
 
-def sort_rev(articles, dates, ranks, probs):
+def sort_rev(gr_ids, articles, dates, ranks, probs):
     '''
     Sort articles according to rank values first and probabilities second
     in reverse order so larger probabilities will be positioned first.
 
-    Group articles in groups by ranks.
+    Group articles by ranks.
     '''
     # Sort.
     ranks, probs, articles, dates = (
@@ -374,48 +381,58 @@ def sort_rev(articles, dates, ranks, probs):
 
     # Group by ranks.
     data = list(zip(*[ranks, probs, articles, dates]))
-    c = groupby(data, lambda x: x[0])
+    gr_data = groupby(data, lambda x: x[0])
     grpd_arts = {}
-    for k, group in c:
+    for k, group in gr_data:
         grpd_arts[k] = list(group)
+
+    # Store number of articles for each group.
+    gr_len = []
+    for g_id in gr_ids:
+        g_id = int(g_id) if g_id != 'n' else 999
+        try:
+            gr_len.append(len(grpd_arts[g_id]))
+        except KeyError:
+            gr_len.append(0)
+
     # To list and sublists.
     grpd_arts = [list(_) for _ in grpd_arts.values()]
 
-    return grpd_arts
+    # Reverse last group (not_interested) so those that have a *lower*
+    # probability of belonging here are shown first.
+    grpd_arts[-1].sort(key=itemgetter(1))
+
+    return grpd_arts, gr_len
 
 
-def manualRank(groups, grpd_arts):
+def manualRank(groups, gr_ids, grpd_arts, gr_len):
     """
     Manually rank articles.
 
     'q', 'quit', 'quit()', 'exit' exit the ranking process and stores
     whatever was ranked at that point.
     """
-    # Ids of all defined groups starting from 1, as strings.
-    gr_ids = [str(_) for _ in range(1, len(groups) + 1)]
     # Total number of articles.
     N_arts = sum([len(_) for _ in grpd_arts])
 
     print("\nTotal number of articles to classify: {}".format(N_arts))
     print("\nArticles per group defined:")
     for i, g in enumerate(groups):
-        try:
-            print(" {} ({}): {}".format(i + 1, g, len(grpd_arts[i])))
-        except IndexError:
-            print(" {} ({}): {}".format(i + 1, g, 0))
+        print(" G={} ({}): {}".format(gr_ids[i], g, gr_len[i]))
 
     train = []
     # For each defined group.
-    for i, articles_gr in enumerate(grpd_arts):
-        print("\n* Articles classified in group {} ({})".format(
-            i + 1, groups[i]))
+    for articles_gr in grpd_arts:
+        gr_id = articles_gr[0][0] - 1 if articles_gr[0][0] != 999 else -1
+        print("\n* Articles classified in group '{}'".format(groups[gr_id]))
 
         # For each article in this group.
         for j, data in enumerate(articles_gr):
             rank, prob, art, date = data
 
-            print('\n{}) R={:.0f}, P={:.2f}, {} ({})\n'.format(
-                str(j + 1), rank, prob, date, art[3]))
+            r = str(rank) if rank != 999 else 'n'
+            print('\n{}) G={}, P={:.2f}, {} ({})\n'.format(
+                str(j + 1), r, prob, date, art[3]))
             # Authors
             authors = art[0] if len(art[0].split(',')) < 4 else\
                 ','.join(art[0].split(',')[:3]) + ', et al.'
@@ -428,7 +445,8 @@ def manualRank(groups, grpd_arts):
             answ = artClass(gr_ids, rank)
 
             if answ in gr_ids:
-                train.append([date, int(answ), art[1] + ' ' + art[2]])
+                a = int(answ) if answ != 'n' else 999
+                train.append([date, a, art[1] + ' ' + art[2]])
             # Jump to next group.
             elif answ == 'next_gr':
                 break
@@ -442,43 +460,17 @@ def manualRank(groups, grpd_arts):
     return train
 
 
-def zotRank(groups, articles, dates):
-    """
-    Assign a rank to Zotero articles.
-    """
-    print("\nGroups defined:")
-    for i, g in enumerate(groups):
-        print(" {}: {}".format(i + 1, g))
-
-    # Ids of all defined groups starting from 1, as strings.
-    gr_ids = [str(_) for _ in range(1, len(groups) + 1)]
-
-    print("\nAssign a group for Zotero entries read.")
-    while True:
-        pn = input("Group (1,..,{}): ".format(len(gr_ids)))
-        if pn in gr_ids:
-            break
-
-    train = []
-    for i, art in enumerate(articles):
-        train.append([dates[i], int(pn), art[1] + ' ' + art[2]])
-
-    return train
-
-
 def artClass(gr_ids, rank):
     """
     Manual ranking.
     """
     while True:
-        pn = input("Group (1,..,{}): ".format(len(gr_ids)))
-        # import random
-        # pn = random.choice(['1', '2', '3'])
+        pn = input("Group (1,..,{},n): ".format(len(gr_ids) - 1))
         if pn in gr_ids:
             return pn
         # Jump to next group.
         elif pn == 'ng':
-            if str(rank + 1) in gr_ids:
+            if str(rank + 1) in gr_ids or (rank + 1) == len(gr_ids):
                 print("\nJump to next group.")
                 return 'next_gr'
             else:
@@ -487,6 +479,27 @@ def artClass(gr_ids, rank):
         # Rest of options mean "Quit training/classifying."
         elif pn in ['', 'q', 'quit', 'quit()', 'exit']:
             return pn
+
+
+def zotRank(groups, gr_ids, articles, dates):
+    """
+    Assign a rank to Zotero articles.
+    """
+    print("\nGroups defined:")
+    for i, g in enumerate(groups):
+        print(" {}: {}".format(gr_ids[i], g))
+
+    print("\nAssign a group for Zotero entries read.")
+    while True:
+        pn = input("Group (1,..,{},n): ".format(len(gr_ids) - 1))
+        if pn in gr_ids:
+            break
+
+    train = []
+    for i, art in enumerate(articles):
+        train.append([dates[i], int(pn), art[1] + ' ' + art[2]])
+
+    return train
 
 
 def updtRank(wordsRank, train):
