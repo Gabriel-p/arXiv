@@ -419,20 +419,22 @@ def manualRank(groups, gr_ids, grpd_arts, gr_len):
     print("\nArticles per group defined:")
     for i, g in enumerate(groups):
         print(" G={} ({}): {}".format(gr_ids[i], g, gr_len[i]))
+    print("\nInput 'ng' to stop classifying and jump to the next group.")
 
     train = []
     # For each defined group.
     for articles_gr in grpd_arts:
         gr_id = articles_gr[0][0] - 1 if articles_gr[0][0] != 999 else -1
-        print("\n* Articles classified in group '{}'".format(groups[gr_id]))
+        print("\n* Articles classified in group '{}' ({})".format(
+            groups[gr_id], len(articles_gr)))
 
         # For each article in this group.
         for j, data in enumerate(articles_gr):
             rank, prob, art, date = data
 
             r = str(rank) if rank != 999 else 'n'
-            print('\n{}) G={}, P={:.2f}, {} ({})\n'.format(
-                str(j + 1), r, prob, date, art[3]))
+            print('\n{}/{}) G={}, P={:.2f}, {} ({})\n'.format(
+                str(j + 1), len(articles_gr), r, prob, date, art[3]))
             # Authors
             authors = art[0] if len(art[0].split(',')) < 4 else\
                 ','.join(art[0].split(',')[:3]) + ', et al.'
