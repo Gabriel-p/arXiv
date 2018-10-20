@@ -7,6 +7,7 @@ from sklearn.linear_model import SGDClassifier
 
 import numpy as np
 import pandas as pd
+import re
 from bs4 import BeautifulSoup as BS
 import requests
 import shlex
@@ -33,10 +34,10 @@ def main():
     '''
 
     # Read date range, arXiv categories, and classification mode.
-    mode, date_range, categs, groups, gr_ids, clmode = get_in_out()
+    mode, date_range, categs, subcategs, groups, gr_ids, clmode = get_in_out()
 
     # Download articles from arXiv.
-    articles, dates = downArts(mode, date_range, categs)
+    articles, dates = downArts(mode, date_range, categs, subcategs)
 
     if articles:
         # Read previous classifications.
@@ -67,7 +68,7 @@ def get_in_out():
     '''
     Reads input parameters from file.
     '''
-    categs, groups = [], []
+    categs, subcategs, groups = [], [], []
     with open("in_params.dat", "r") as ff:
         for li in ff:
             if not li.startswith("#"):
@@ -80,6 +81,10 @@ def get_in_out():
                     # Store each keyword separately in list.
                     for k in shlex.split(li[3:]):
                         categs.append(k)
+                # Sub-categories.
+                if li[0:2] == 'SC':
+                    for k in shlex.split(li[3:]):
+                        subcategs.append(k)
                 # Classification mode.
                 if li[0:2] == 'CM':
                     clmode = li.split()[1]
@@ -96,10 +101,11 @@ def get_in_out():
 
     print("\nRunning '{}' mode.".format(mode))
     print("Classifier '{}' selected.\n".format(clmode))
-    return mode, [start_date, end_date], categs, groups, gr_ids, clmode
+    return mode, [start_date, end_date], categs, subcategs, groups, gr_ids,\
+        clmode
 
 
-def downArts(mode, date_range, categs):
+def downArts(mode, date_range, categs, subcategs):
     """
     Download articles from arXiv for all the categories selected, for the
     dates chosen.
@@ -123,14 +129,18 @@ def downArts(mode, date_range, categs):
                 # Get data from each category.
                 soup = get_arxiv_data(categ, day_week, mode)
 
-                # Store titles, links, authors and abstracts into list.
-                date_arts = get_articles(soup)
+                # Store article data list.
+                soup_arts = get_articles(soup)
+
+                # Filter by sub-categories
+                date_arts = filterSubcats(subcategs, soup_arts)
 
                 # Filter out duplicated articles.
                 if articles:
                     all_arts = list(zip(*articles))
                     no_dupl = []
                     for art in date_arts:
+                        # Compare titles.                        
                         if art[1] not in all_arts[1]:
                             no_dupl.append(art)
                 else:
@@ -226,8 +236,8 @@ def get_arxiv_data(categ, day_week, mode):
         url = "http://arxiv.org/list/" + categ + "/new"
     else:
         year, month, day = day_week
-        print("Downloading arXiv data for {}-{}-{}".format(
-            year, month, day))
+        print("Downloading arXiv data for {}-{}-{} ({})".format(
+            year, month, day, categ))
         url = "https://arxiv.org/catchup?smonth=" + month + "&group=grp_&s" +\
               "day=" + day + "&num=50&archive=" + categ +\
               "&method=with&syear=" + year
@@ -261,9 +271,24 @@ def get_articles(soup):
     abstracts = [_.text.replace('\n', ' ') for _
                  in soup.find_all('p', class_="mathjax")]
 
-    articles = list(zip(*[authors, titles, abstracts, links]))
+    subjects = [_.text.replace('\n', ' ') for _
+                 in soup.find_all(class_="list-subjects")]
+    subjects = [re.findall('\((.*?)\)', _) for _ in subjects]
+
+    articles = list(zip(*[authors, titles, abstracts, links, subjects]))
 
     return articles
+
+
+def filterSubcats(subcategs, soup_arts):
+    """
+    Only keep articles whose sub-categories are in the 'subcategs' list.
+    """
+    date_arts = []
+    for art in soup_arts:
+        if any(_ in subcategs for _ in art[-1]):
+            date_arts.append(art)
+    return date_arts
 
 
 def readWords():

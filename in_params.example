@@ -7,6 +7,9 @@ MO  recent    2018-01-01     2018-01-30
 #   Categories.
 CA  astro-ph
 
+#   Only include these sub-ategories.
+SC  astro-ph.GA  astro-ph.IM
+
 #   Classification mode: NB / LR / MH / SVM / PC
 #
 #   NB: Naive Bayes
