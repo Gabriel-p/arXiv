@@ -29,6 +29,17 @@ methods:
   - `PC`: linear loss used by the perceptron algorithm
 
 
+## Installing
+
+The [conda](https://conda.io/) environment can be created with
+
+    $ conda create -n arxivenv scikit-learn numpy pandas requests beautifulsoup4 lxml python-dateutil
+
+and activated with:
+
+    $ conda activate arxivenv
+
+
 ## Categories
 
 Astrophysics: **astro-ph**
@@ -66,13 +77,3 @@ Quantitative Biology: **q-bio**
 Quantitative Finance: **q-fin**
 
 Statistics: **stat**
-
-## Installing
-
-The [conda](https://conda.io/) environment can be created with
-
-`$ conda create -n arxivenv scikit-learn pandas numpy beautifulsoup4 requests lxml`
-
-and activated with:
-
-`$ source activate arxivenv`
