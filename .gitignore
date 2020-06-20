@@ -1,5 +1,10 @@
-keywords.dat
+*pyc
+in_params.dat
 temp.del
-input/*.pkl
+*.pkl
+*.pickle
 temp
+classifier.dat
+classifier_bck.dat
+*.csv
 
