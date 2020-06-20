@@ -1,5 +1,6 @@
 *pyc
-in_params.dat
+params.ini
+.condaauto
 temp.del
 *.pkl
 *.pickle
